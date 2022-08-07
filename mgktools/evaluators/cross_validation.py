@@ -31,7 +31,7 @@ class Evaluator:
                  model,
                  task_type: Literal['regression', 'binary', 'multi-class'],
                  metrics: List[Metric],
-                 split_type: Literal['random', 'scaffold_balanced', 'loocv', 'assigned'],
+                 split_type: Literal['random', 'scaffold_balanced', 'loocv'],
                  split_sizes: Tuple[float, float] = None,
                  num_folds: int = 1,
                  return_std: bool = False,

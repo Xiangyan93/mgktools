@@ -489,10 +489,14 @@ class GraphKernelConfig(BaseKernelConfig):
             for i in range(N_MGK, N_MGK + N_conv_MGK):
                 kernels.append(
                     self._get_conv_graph_kernel(self.graph_hyperparameters[i]))
-            kernels += self._get_rbf_kernel()
-            composition = [(i,) for i in range(N_MGK + N_conv_MGK)] + \
-                          [tuple(np.arange(N_MGK + N_conv_MGK,
-                                           N_RBF + N_MGK + N_conv_MGK))]
+            kernel = self._get_rbf_kernel()
+            if len(kernel) != 0:
+                kernels += self._get_rbf_kernel()
+                composition = [(i,) for i in range(N_MGK + N_conv_MGK)] + \
+                              [tuple(np.arange(N_MGK + N_conv_MGK,
+                                               N_RBF + N_MGK + N_conv_MGK))]
+            else:
+                composition = [(i,) for i in range(N_MGK + N_conv_MGK)]
             self.kernel = HybridKernel(
                 kernel_list=kernels,
                 composition=composition,

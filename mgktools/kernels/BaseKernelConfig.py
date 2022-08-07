@@ -20,7 +20,6 @@ class BaseKernelConfig:
         self.N_RBF = N_RBF
         self.sigma_RBF = sigma_RBF
         self.sigma_RBF_bounds = sigma_RBF_bounds
-        self.kernel = self._get_rbf_kernel()[0]
 
     def get_kernel_dict(self, X: np.ndarray, X_labels: np.ndarray) -> Dict:
         K = self.kernel(X)
@@ -31,7 +30,9 @@ class BaseKernelConfig:
         }
 
     def _update_kernel(self):
-        self.kernel = self._get_rbf_kernel()[0]
+        kernel = self._get_rbf_kernel()
+        if len(kernel) != 0:
+            self.kernel = self._get_rbf_kernel()[0]
 
     def _get_rbf_kernel(self) -> List:
         if self.N_RBF != 0:
@@ -43,7 +44,7 @@ class BaseKernelConfig:
         # ConstantKernel(1.0, (1e-3, 1e3)) * \
             return [add_kernel]
         else:
-            return [None]
+            return []
 
     # functions for Bayesian optimization of hyperparameters.
     def get_space(self):
