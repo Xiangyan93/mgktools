@@ -174,7 +174,7 @@ def get_interpreted_mols(smiles_train: List[str],
                          smiles_to_be_interpret: List[str] = None,
                          alpha: float = 0.01,
                          mgk_hyperparameters_file: str = additive_pnorm,
-                         n_jobs: int = 1):
+                         return_mols_only: bool = True):
     """Interpret all molecules, and save the interpretation in the RDKit Mol object.
 
     Parameters
@@ -189,8 +189,8 @@ def get_interpreted_mols(smiles_train: List[str],
         data noise of Gaussian process regression.
     mgk_hyperparameters_file: dict
         hyperparameters for marginalized graph kernel.
-    n_jobs: int
-        number of processes when transforming smiles into graphs.
+    return_mols_only: bool
+        if True, return the RDKit mols
 
     Returns
     -------
@@ -204,13 +204,17 @@ def get_interpreted_mols(smiles_train: List[str],
                                graph_hyperparameters=graph_hyperparameters).kernel
     gpr = GPR(kernel=kernel, alpha=alpha, normalize_y=False).fit(graphs, targets_train)
     mols_to_be_interpret = [Chem.MolFromSmiles(s) for s in smiles_to_be_interpret]
-    graphs_to_be_interpret = [HashGraph.from_rdkit(mol) for mol in mols_to_be_interpret]
-    HashGraph.unify_datatype(graphs + graphs_to_be_interpret, inplace=True)
-    y_pred, y_std = gpr.predict(graphs_to_be_interpret, return_std=True)
     for mol in tqdm(mols_to_be_interpret, total=len(mols_to_be_interpret)):
         node_graphs = get_node_graphs(mol)
         HashGraph.unify_datatype(graphs + node_graphs, inplace=True)
         y_nodes = gpr.predict(node_graphs)
         for i, atom in enumerate(mol.GetAtoms()):
             atom.SetProp('atomNote', '%.3f' % y_nodes[i])
-    return y_pred, y_std, mols_to_be_interpret
+
+    if return_mols_only:
+        return mols_to_be_interpret
+    else:
+        graphs_to_be_interpret = [HashGraph.from_rdkit(mol) for mol in mols_to_be_interpret]
+        HashGraph.unify_datatype(graphs + graphs_to_be_interpret, inplace=True)
+        y_pred, y_std = gpr.predict(graphs_to_be_interpret, return_std=True)
+        return y_pred, y_std, mols_to_be_interpret

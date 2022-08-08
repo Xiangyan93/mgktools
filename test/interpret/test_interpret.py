@@ -59,7 +59,8 @@ def test_get_interpreted_mols(testset):
                                                targets_train=targets,
                                                smiles_to_be_interpret=smiles_to_be_interpret,
                                                mgk_hyperparameters_file=mgk_hyperparameters_file,
-                                               alpha=0.01)
+                                               alpha=0.01,
+                                               return_mols_only=False)
     for i, mol in enumerate(mols):
         y_sum = 0.
         for atom in mol.GetAtoms():
