@@ -28,7 +28,7 @@ setuptools.setup(
         'tqdm>=4.62.0',
         'hyperopt>=0.2.5',
         'scipy>=1.6.2',
-        'mendeleev==0.6.1',
+        'mendeleev>=0.7',
         'rxntools>=0.0.2',
         'pycuda==2020.1',
     ],
