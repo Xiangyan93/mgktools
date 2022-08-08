@@ -12,8 +12,8 @@ CUDA(11.7).
 ```
 conda install rdkit -c conda-forge
 pip install git+https://github.com/bp-kelley/descriptastorus
-pip install git+https://gitlab.com/XiangyanSJTU/graphdot.git@feature/start_probability
-pip install mgktools==0.0.0
+pip install git+https://gitlab.com/Xiangyan93/graphdot.git@feature/xy
+pip install mgktools==0.0.1
 ```
 
 ## Usage

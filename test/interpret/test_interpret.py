@@ -26,8 +26,8 @@ def test_interpret_training_mols(testset):
         output_order='sort_by_value',
         mgk_hyperparameters_file=mgk_hyperparameters_file,
         n_jobs=6)
-    assert abs(df_interpret['contribution_value'].sum() - y_pred) < 0.000000001
-    assert df_interpret['contribution_value'].sum() == pytest.approx(y_pred, 0.000000001)
+    assert abs(df_interpret['contribution_value'].sum() - y_pred) < 1e-5
+    assert df_interpret['contribution_value'].sum() == pytest.approx(y_pred, 1e-5)
 
 @pytest.mark.parametrize('testset', [
     (additive_pnorm),
