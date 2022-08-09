@@ -141,7 +141,7 @@ def interpret_atoms(smiles_to_be_interpret: str,
     y_pred, y_std = gpr.predict([graph_to_be_interpret], return_std=True)
     y_nodes = gpr.predict(node_graphs)
     for i, atom in enumerate(mol.GetAtoms()):
-        atom.SetProp('atomNote', '%.3f' % y_nodes[i])
+        atom.SetProp('atomNote', '%.6f' % y_nodes[i])
     return y_pred[0], y_std[0], mol
 
 
@@ -209,7 +209,7 @@ def get_interpreted_mols(smiles_train: List[str],
         HashGraph.unify_datatype(graphs + node_graphs, inplace=True)
         y_nodes = gpr.predict(node_graphs)
         for i, atom in enumerate(mol.GetAtoms()):
-            atom.SetProp('atomNote', '%.3f' % y_nodes[i])
+            atom.SetProp('atomNote', '%.6f' % y_nodes[i])
 
     if return_mols_only:
         return mols_to_be_interpret
