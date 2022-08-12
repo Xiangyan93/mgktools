@@ -52,15 +52,18 @@ def test_interpret_atoms(testset):
     (additive_pnorm),
     (product_pnorm),
 ])
-def test_get_interpreted_mols(testset):
+@pytest.mark.parametrize('batch_size', [(1), (2), (3)])
+def test_get_interpreted_mols(testset, batch_size):
     mgk_hyperparameters_file = testset
-    smiles_to_be_interpret = ['Cc1cc(cc(c1)O)C', 'CC(C)C(C)C']
+    batch_size = batch_size
+    smiles_to_be_interpret = ['Cc1cc(cc(c1)O)C', 'CC(C)C(C)C', 'CCCO', 'C1CCCC1CCO']
     y_pred, y_std, mols = get_interpreted_mols(smiles_train=pure,
                                                targets_train=targets,
                                                smiles_to_be_interpret=smiles_to_be_interpret,
                                                mgk_hyperparameters_file=mgk_hyperparameters_file,
                                                alpha=0.01,
-                                               return_mols_only=False)
+                                               return_mols_only=False,
+                                               batch_size=batch_size)
     for i, mol in enumerate(mols):
         y_sum = 0.
         for atom in mol.GetAtoms():

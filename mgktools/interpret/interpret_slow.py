@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import json
 import rdkit.Chem.AllChem as Chem
-import math
 from ..hyperparameters import additive_pnorm
 from ..graph.hashgraph import HashGraph
 from ..data import Dataset
@@ -131,15 +130,16 @@ def interpret_atoms(smiles_to_be_interpret: str,
     """
     graph_to_be_interpret = HashGraph.from_smiles(smiles_to_be_interpret)
     mol = Chem.MolFromSmiles(smiles_to_be_interpret)
+    node_graphs = get_node_graphs(mol)
     graphs_train = [HashGraph.from_smiles(s) for s in smiles_train]
-    HashGraph.unify_datatype(graphs_train + [graph_to_be_interpret], inplace=True)
+    HashGraph.unify_datatype(graphs_train + node_graphs + [graph_to_be_interpret], inplace=True)
     graph_hyperparameters = [json.load(open(mgk_hyperparameters_file))]
     kernel = GraphKernelConfig(N_MGK=1,
                                graph_hyperparameters=graph_hyperparameters).kernel
     # normalize_y must be false.
     gpr = GPR(kernel=kernel, alpha=alpha, normalize_y=False).fit(graphs_train, targets_train)
     y_pred, y_std = gpr.predict([graph_to_be_interpret], return_std=True)
-    y_nodes = gpr.predict_nodal([graph_to_be_interpret])
+    y_nodes = gpr.predict(node_graphs)
     for i, atom in enumerate(mol.GetAtoms()):
         atom.SetProp('atomNote', '%.6f' % y_nodes[i])
     return y_pred[0], y_std[0], mol
@@ -174,8 +174,7 @@ def get_interpreted_mols(smiles_train: List[str],
                          smiles_to_be_interpret: List[str] = None,
                          alpha: float = 0.01,
                          mgk_hyperparameters_file: str = additive_pnorm,
-                         return_mols_only: bool = True,
-                         batch_size: int = 1):
+                         return_mols_only: bool = True):
     """Interpret all molecules, and save the interpretation in the RDKit Mol object.
 
     Parameters
@@ -205,23 +204,12 @@ def get_interpreted_mols(smiles_train: List[str],
                                graph_hyperparameters=graph_hyperparameters).kernel
     gpr = GPR(kernel=kernel, alpha=alpha, normalize_y=False).fit(graphs, targets_train)
     mols_to_be_interpret = [Chem.MolFromSmiles(s) for s in smiles_to_be_interpret]
-    graphs_to_be_interpret = [HashGraph.from_rdkit(mol) for mol in mols_to_be_interpret]
-    HashGraph.unify_datatype(graphs + graphs_to_be_interpret, inplace=True)
-    N_batch = math.ceil(len(smiles_to_be_interpret) / batch_size)
-    for i in range(N_batch):
-        start = batch_size * i
-        end = batch_size * (i + 1)
-        if end > len(smiles_to_be_interpret):
-            end = len(smiles_to_be_interpret)
-        g = graphs_to_be_interpret[start:end]
-        y_nodes = gpr.predict_nodal(g)
-        k = 0
-        for j in range(start, end):
-            mol = mols_to_be_interpret[j]
-            for atom in mol.GetAtoms():
-                atom.SetProp('atomNote', '%.6f' % y_nodes[k])
-                k += 1
-        assert k == len(y_nodes)
+    for mol in tqdm(mols_to_be_interpret, total=len(mols_to_be_interpret)):
+        node_graphs = get_node_graphs(mol)
+        HashGraph.unify_datatype(graphs + node_graphs, inplace=True)
+        y_nodes = gpr.predict(node_graphs)
+        for i, atom in enumerate(mol.GetAtoms()):
+            atom.SetProp('atomNote', '%.6f' % y_nodes[i])
 
     if return_mols_only:
         return mols_to_be_interpret
