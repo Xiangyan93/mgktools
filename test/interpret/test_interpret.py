@@ -44,8 +44,8 @@ def test_interpret_atoms(testset):
     y_sum = 0.
     for atom in mol.GetAtoms():
         y_sum += float(atom.GetProp('atomNote'))
-    assert abs(y_sum - y_pred) < 0.003
-    assert y_sum == pytest.approx(y_pred, 0.003)
+    assert abs(y_sum - y_pred) < 1e-5
+    assert y_sum == pytest.approx(y_pred, 1e-5)
 
 
 @pytest.mark.parametrize('testset', [
@@ -68,5 +68,5 @@ def test_get_interpreted_mols(testset, batch_size):
         y_sum = 0.
         for atom in mol.GetAtoms():
             y_sum += float(atom.GetProp('atomNote'))
-        assert abs(y_sum - y_pred[i]) < 0.003
-        assert y_sum == pytest.approx(y_pred[i], 0.003)
+        assert abs(y_sum - y_pred[i]) < 1e-5
+        assert y_sum == pytest.approx(y_pred[i], 1e-5)
