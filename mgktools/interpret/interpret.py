@@ -208,7 +208,7 @@ def get_interpreted_mols(smiles_train: List[str],
     graphs_to_be_interpret = [HashGraph.from_rdkit(mol) for mol in mols_to_be_interpret]
     HashGraph.unify_datatype(graphs + graphs_to_be_interpret, inplace=True)
     N_batch = math.ceil(len(smiles_to_be_interpret) / batch_size)
-    for i in range(N_batch):
+    for i in tqdm(range(N_batch)):
         start = batch_size * i
         end = batch_size * (i + 1)
         if end > len(smiles_to_be_interpret):
