@@ -44,5 +44,12 @@ setuptools.setup(
         'Operating System :: OS Independent',
     ],
     include_package_data=True,
-    data_files=[('hyperparameters', ['mgktools/hyperparameters/*.json'])]
+    data_files=[('hyperparameters', ['mgktools/hyperparameters/additive.json',
+                                     'mgktools/hyperparameters/additive-msnorm.json',
+                                     'mgktools/hyperparameters/additive-norm.json',
+                                     'mgktools/hyperparameters/additive-pnorm.json',
+                                     'mgktools/hyperparameters/product.json',
+                                     'mgktools/hyperparameters/product-msnorm.json',
+                                     'mgktools/hyperparameters/product-norm.json',
+                                     'mgktools/hyperparameters/product-pnorm.json'])]
 )
