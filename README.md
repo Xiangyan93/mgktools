@@ -20,5 +20,5 @@ pip install mgktools==0.0.1
 See [notebooks](https://github.com/Xiangyan93/mgktools/tree/main/notebooks)
 
 ## Hyperparameters
-[hyperparameters](https://github.com/Xiangyan93/mgktools/tree/main/hyperparameters) contains the JSON files that
+[hyperparameters](https://github.com/Xiangyan93/mgktools/tree/main/mgktools/hyperparameters) contains the JSON files that
 define the hyperparameters for MGK.
