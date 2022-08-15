@@ -3,7 +3,7 @@
 import pickle
 import math
 from graphdot.model.gaussian_process.nystrom import *
-from graphdot.model.gaussian_process.gpr import minimize
+from graphdot.model.gaussian_process.gpr import GaussianProcessRegressor as GPR
 from .sgd import *
 
 
@@ -31,7 +31,7 @@ def predict_(predict, X, return_std=False, return_cov=False, memory_save=True,
             return np.concatenate(y_mean)
 
 
-class GPR(GaussianProcessRegressor):
+class GPR_(GPR):
     def __init__(self, *args, **kwargs):
         self.batch_size = kwargs.pop('batch_size', None)
         super().__init__(*args, **kwargs)
