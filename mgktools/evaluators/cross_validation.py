@@ -71,7 +71,7 @@ class Evaluator:
         seed
         """
         self.save_dir = save_dir
-        if not os.path.exists(self.save_dir):
+        if self.write_file and not os.path.exists(self.save_dir):
             os.mkdir(self.save_dir)
         self.dataset = dataset
         self.model = model
@@ -88,6 +88,13 @@ class Evaluator:
         self.n_core = n_core
         self.seed = seed
         self.verbose = verbose
+
+    @property
+    def write_file(self) -> bool:
+        if self.save_dir is None:
+            return False
+        else:
+            return True
 
     def evaluate(self, external_test_dataset: Optional[Dataset] = None):
         # Leave-One-Out cross validation
@@ -247,7 +254,7 @@ class Evaluator:
         else:
             y_pred = self.model.predict(X)
             y_std = None
-        if logfile is not None:
+        if logfile is not None and self.write_file:
             self._output_df(target=y,
                             predict=y_pred,
                             uncertainty=y_std,

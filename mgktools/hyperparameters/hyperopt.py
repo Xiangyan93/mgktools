@@ -15,22 +15,23 @@ def save_best_params(save_dir: str,
     best_idx = np.where(results == np.min(results))[0][0]
     best = hyperdicts[best_idx].copy()
     #
-    if 'alpha' in best:
-        open('%s/alpha' % save_dir, 'w').write('%s' % best.pop('alpha'))
-    elif 'C' in best:
-        open('%s/C' % save_dir, 'w').write('%s' % best.pop('C'))
-    kernel_config.update_from_space(best)
-    kernel_config.save_hyperparameters(save_dir)
+    if save_dir is not None:
+        if 'alpha' in best:
+            open('%s/alpha' % save_dir, 'w').write('%s' % best.pop('alpha'))
+        elif 'C' in best:
+            open('%s/C' % save_dir, 'w').write('%s' % best.pop('C'))
+        kernel_config.update_from_space(best)
+        kernel_config.save_hyperparameters(save_dir)
     return best
 
 
-def bayesian_optimization(save_dir: str,
+def bayesian_optimization(save_dir: Optional[str],
                           dataset: Dataset,
                           kernel_config,
                           task_type: Literal['regression', 'binary', 'multi-class'],
                           model_type: Literal['gpr', 'gpr-sod', 'gpr-nystrom', 'gpr-nle', 'svr', 'gpc', 'svc'],
-                          metric: Metric,
-                          split_type: Literal['random', 'scaffold_balanced', 'loocv', 'assigned'],
+                          metric: Literal[Metric, 'log_likelihood'],
+                          split_type: Literal['random', 'scaffold_balanced', 'loocv', 'assigned'] = None,
                           num_iters: int = 100,
                           alpha: float = 0.01,
                           alpha_bounds: Tuple[float, float] = None,
@@ -39,7 +40,7 @@ def bayesian_optimization(save_dir: str,
                           C_bounds: Tuple[float, float] = None,
                           d_C: float = None,
                           seed: int = 0,
-                          external_test_dataset: Optional[Dataset] = None
+                          # external_test_dataset: Optional[Dataset] = None,
                           ):
     if task_type == 'regression':
         assert model_type in ['gpr', 'gpr-sod', 'gpr-nystrom', 'gpr-nle', 'svr']
@@ -56,32 +57,42 @@ def bayesian_optimization(save_dir: str,
         alpha_ = hyperdict.pop('alpha', alpha)
         C_ = hyperdict.pop('C', C)
         kernel_config.update_from_space(hyperdict)
-        kernel = kernel_config.get_precomputed_kernel_config(dataset).kernel
-
-        model = set_model(model_type=model_type,
-                          kernel=kernel,
-                          alpha=alpha_,
-                          C=C_)
-        dataset.graph_kernel_type = 'pre-computed'
-        evaluator = Evaluator(save_dir=save_dir,
-                              dataset=dataset,
-                              model=model,
-                              task_type=task_type,
-                              metrics=[metric],
-                              split_type=split_type,
-                              split_sizes=(0.8, 0.2),
-                              num_folds=1 if split_type == 'loocv' else 10,
-                              return_std=True if task_type == 'regression' else False,
-                              return_proba=False if task_type == 'regression' else True,
-                              n_similar=None,
-                              verbose=False)
-        result = evaluator.evaluate()
-        results.append(result)
-        dataset.graph_kernel_type = 'graph'
-        if metric in ['rmse', 'mae', 'mse', 'max']:
+        if metric == 'log_likelihood':
+            assert model_type in ['gpr', 'gpr-sod', 'gpr-nystrom', 'gpr-nle']
+            kernel = kernel_config.kernel
+            model = set_model(model_type=model_type,
+                              kernel=kernel,
+                              alpha=alpha_)
+            dataset.graph_kernel_type = 'graph'
+            result = model.log_marginal_likelihood(X=dataset.X, y=dataset.y)
+            results.append(result)
             return result
         else:
-            return -result
+            kernel = kernel_config.get_precomputed_kernel_config(dataset).kernel
+            model = set_model(model_type=model_type,
+                              kernel=kernel,
+                              alpha=alpha_,
+                              C=C_)
+            dataset.graph_kernel_type = 'pre-computed'
+            evaluator = Evaluator(save_dir=save_dir,
+                                  dataset=dataset,
+                                  model=model,
+                                  task_type=task_type,
+                                  metrics=[metric],
+                                  split_type=split_type,
+                                  split_sizes=(0.8, 0.2),
+                                  num_folds=1 if split_type == 'loocv' else 10,
+                                  return_std=True if task_type == 'regression' else False,
+                                  return_proba=False if task_type == 'regression' else True,
+                                  n_similar=None,
+                                  verbose=False)
+            result = evaluator.evaluate()
+            results.append(result)
+            dataset.graph_kernel_type = 'graph'
+            if metric in ['rmse', 'mae', 'mse', 'max']:
+                return result
+            else:
+                return -result
 
     SPACE = kernel_config.get_space()
 

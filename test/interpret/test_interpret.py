@@ -26,7 +26,6 @@ def test_interpret_training_mols(testset):
         output_order='sort_by_value',
         mgk_hyperparameters_file=mgk_hyperparameters_file,
         n_jobs=6)
-    assert abs(df_interpret['contribution_value'].sum() - y_pred) < 1e-5
     assert df_interpret['contribution_value'].sum() == pytest.approx(y_pred, 1e-5)
 
 @pytest.mark.parametrize('testset', [
@@ -44,7 +43,6 @@ def test_interpret_atoms(testset):
     y_sum = 0.
     for atom in mol.GetAtoms():
         y_sum += float(atom.GetProp('atomNote'))
-    assert abs(y_sum - y_pred) < 1e-5
     assert y_sum == pytest.approx(y_pred, 1e-5)
 
 
@@ -68,5 +66,4 @@ def test_get_interpreted_mols(testset, batch_size):
         y_sum = 0.
         for atom in mol.GetAtoms():
             y_sum += float(atom.GetProp('atomNote'))
-        assert abs(y_sum - y_pred[i]) < 1e-5
         assert y_sum == pytest.approx(y_pred[i], 1e-5)

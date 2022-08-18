@@ -8,7 +8,7 @@ from ..data import Dataset
 
 
 def get_features_hyperparameters(
-        N_RBF: int,
+        n_features: int,
         features_hyperparameters: List[float] = None,
         features_hyperparameters_bounds: Union[List[Tuple[float, float]], Literal['fixed']] = None,
         features_hyperparameters_file: str = None,
@@ -17,7 +17,7 @@ def get_features_hyperparameters(
 
     Parameters
     ----------
-    N_RBF: dimension of RBF kernel
+    n_features: dimension of RBF kernel
     features_hyperparameters
     features_hyperparameters_bounds
     features_hyperparameters_file
@@ -26,90 +26,91 @@ def get_features_hyperparameters(
     -------
 
     """
-    if N_RBF == 0:
-        sigma_RBF, sigma_RBF_bounds = None, None
+    if n_features == 0 or features_hyperparameters is None:
+        rbf_length_scale, rbf_length_scale_bounds = None, None
     elif features_hyperparameters_file is not None:
         rbf = json.load(open(features_hyperparameters_file))
-        sigma_RBF = rbf['sigma_RBF']
-        sigma_RBF_bounds = rbf['sigma_RBF_bounds']
+        rbf_length_scale = rbf['rbf_length_scale']
+        rbf_length_scale_bounds = rbf['rbf_length_scale_bounds']
     else:
-        sigma_RBF = features_hyperparameters
-        sigma_RBF_bounds = features_hyperparameters_bounds
-        if len(sigma_RBF) != 1 and len(sigma_RBF) != N_RBF:
-            raise ValueError(f'The number of features({N_RBF}) not equal to the number of hyperparameters'
-                             f'({len(sigma_RBF)})')
-    return sigma_RBF, sigma_RBF_bounds
+        rbf_length_scale = features_hyperparameters
+        rbf_length_scale_bounds = features_hyperparameters_bounds
+        if len(rbf_length_scale) != 1 and len(rbf_length_scale) != n_features:
+            raise ValueError(f'The number of features({n_features}) not equal to the number of hyperparameters'
+                             f'({len(rbf_length_scale)})')
+    return rbf_length_scale, rbf_length_scale_bounds
 
 
 def get_kernel_config(dataset: Dataset,
                       graph_kernel_type: Literal['graph', 'pre-computed', None],
                       # arguments for vectorized features.
-                      features_hyperparameters: List[float] = None,
-                      features_hyperparameters_bounds: List[Tuple[float]] = None,
+                      features_kernel_type: Literal['dot_product', 'rbf'] = None,
+                      rbf_length_scale: List[float] = None,
+                      rbf_length_scale_bounds: Literal[List[Tuple[float]], "fixed"] = None,
                       features_hyperparameters_file: str = None,
                       # arguments for marginalized graph kernel
                       mgk_hyperparameters_files: List[str] = None,
                       # arguments for pre-computed kernel
                       kernel_dict: Dict = None,
                       kernel_pkl: str = 'kernel.pkl'):
-    if graph_kernel_type is None:
-        N_RBF = dataset.N_features_mol + dataset.N_features_add
-        assert N_RBF != 0
-        sigma_RBF, sigma_RBF_bounds = get_features_hyperparameters(
-            N_RBF,
-            features_hyperparameters,
-            features_hyperparameters_bounds,
+    if features_kernel_type is None:
+        n_features = 0
+        rbf_length_scale, rbf_length_scale_bounds = None, None
+    else:
+        n_features = dataset.N_features_mol + dataset.N_features_add
+        assert n_features != 0
+        rbf_length_scale, rbf_length_scale_bounds = get_features_hyperparameters(
+            n_features,
+            rbf_length_scale,
+            rbf_length_scale_bounds,
             features_hyperparameters_file,
         )
+        if features_kernel_type == 'dot_product':
+            assert rbf_length_scale is None
+            assert rbf_length_scale_bounds is None
+
+    if graph_kernel_type is None:
         params = {
-            'N_RBF': N_RBF,
-            'sigma_RBF': sigma_RBF,  # np.concatenate(sigma_RBF),
-            'sigma_RBF_bounds': sigma_RBF_bounds,  # * N_RBF,
+            'features_kernel_type': features_kernel_type,
+            'n_features': n_features,
+            'rbf_length_scale': rbf_length_scale,  # np.concatenate(rbf_length_scale),
+            'rbf_length_scale_bounds': rbf_length_scale_bounds,  # * n_features,
         }
-        from mgktools.kernels.BaseKernelConfig import BaseKernelConfig
-        return BaseKernelConfig(**params)
+        from mgktools.kernels.FeatureKernelConfig import FeatureKernelConfig
+        return FeatureKernelConfig(**params)
     elif graph_kernel_type == 'graph':
         mgk_hyperparameters_files = [
             json.load(open(j)) for j in mgk_hyperparameters_files
         ]
         assert dataset.N_MGK + dataset.N_conv_MGK == len(mgk_hyperparameters_files)
-
-        N_RBF = dataset.N_features_mol + dataset.N_features_add
-        sigma_RBF, sigma_RBF_bounds = get_features_hyperparameters(
-            N_RBF,
-            features_hyperparameters,
-            features_hyperparameters_bounds,
-            features_hyperparameters_file,
-        )
-
         params = {
             'N_MGK': dataset.N_MGK,
             'N_conv_MGK': dataset.N_conv_MGK,
             'graph_hyperparameters': mgk_hyperparameters_files,
             'unique': False,
-            'N_RBF': N_RBF,
-            'sigma_RBF': sigma_RBF,  # np.concatenate(sigma_RBF),
-            'sigma_RBF_bounds': sigma_RBF_bounds,  # * N_RBF,
+            'features_kernel_type': features_kernel_type,
+            'n_features': n_features,
+            'rbf_length_scale': rbf_length_scale,  # np.concatenate(rbf_length_scale),
+            'rbf_length_scale_bounds': rbf_length_scale_bounds,  # * n_features,
         }
         from mgktools.kernels.GraphKernel import GraphKernelConfig
         return GraphKernelConfig(**params)
-    else:
-        N_RBF = 0 if dataset.data[0].features_add is None \
-            else dataset.data[0].features_add.shape[1]
-        sigma_RBF, sigma_RBF_bounds = get_features_hyperparameters(
-            N_RBF,
-            features_hyperparameters,
-            features_hyperparameters_bounds,
-            features_hyperparameters_file,
-        )
+    elif graph_kernel_type == 'pre-computed':
+        if dataset.data[0].features_add is None:
+            n_features = 0
+        else:
+            n_features = dataset.data[0].features_add.shape[1]
 
         if kernel_dict is None:
             kernel_dict = pickle.load(open(kernel_pkl, 'rb'))
         params = {
             'kernel_dict': kernel_dict,
-            'N_RBF': N_RBF,
-            'sigma_RBF': sigma_RBF,
-            'sigma_RBF_bounds': sigma_RBF_bounds,  # * N_RBF,
+            'features_kernel_type': features_kernel_type,
+            'n_features': n_features,
+            'rbf_length_scale': rbf_length_scale,
+            'rbf_length_scale_bounds': rbf_length_scale_bounds,  # * n_features,
         }
         from mgktools.kernels.PreComputed import PreComputedKernelConfig
         return PreComputedKernelConfig(**params)
+    else:
+        raise ValueError()

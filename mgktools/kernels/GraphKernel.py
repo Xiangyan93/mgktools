@@ -23,7 +23,7 @@ from graphdot.microprobability import (
 )
 from ..data.data import Dataset
 from ..kernels.utils import get_kernel_config
-from .BaseKernelConfig import BaseKernelConfig
+from .FeatureKernelConfig import FeatureKernelConfig
 from .HybridKernel import *
 from .ConvKernel import *
 
@@ -252,7 +252,7 @@ class ConvolutionGraphKernel(MGK):
             K_gradient_graph=K_gradient_graph, theta=self.theta)
 
     def diag(self, X, eval_gradient=False, n_process=cpu_count(),
-                 K_graph=None, K_gradient_graph=None, *args, **kwargs):
+             K_graph=None, K_gradient_graph=None, *args, **kwargs):
         graph, K_graph, K_gradient_graph = self.__get_K_dK(
             X, None, eval_gradient)
         return ConvolutionKernel().diag(
@@ -272,17 +272,18 @@ class ConvolutionGraphKernel(MGK):
         return graph, K_graph, K_gradient_graph
 
 
-class GraphKernelConfig(BaseKernelConfig):
-    def __init__(self, N_MGK: int = 0, N_conv_MGK: int = 0,
-                 graph_hyperparameters: List[Dict] = [],
+class GraphKernelConfig(FeatureKernelConfig):
+    def __init__(self, graph_hyperparameters: List[Dict],
+                 N_MGK: int = 0, N_conv_MGK: int = 0,
                  unique: bool = False,
-                 N_RBF: int = 0,
-                 sigma_RBF: List[float] = None,
-                 sigma_RBF_bounds: List[Tuple[float, float]] = None):
-        super().__init__(N_RBF, sigma_RBF, sigma_RBF_bounds)
+                 features_kernel_type: Literal['dot_product', 'rbf'] = None,
+                 n_features: int = 0,
+                 rbf_length_scale: List[float] = None,
+                 rbf_length_scale_bounds: List[Tuple[float]] = None, ):
+        super().__init__(features_kernel_type, n_features, rbf_length_scale, rbf_length_scale_bounds)
+        self.graph_hyperparameters = graph_hyperparameters
         self.N_MGK = N_MGK
         self.N_conv_MGK = N_conv_MGK
-        self.graph_hyperparameters = graph_hyperparameters
         self.unique = unique
         assert (len(self.graph_hyperparameters) == N_MGK + N_conv_MGK)
         self._update_kernel()
@@ -297,9 +298,9 @@ class GraphKernelConfig(BaseKernelConfig):
             p=p,
             unique=self.unique
         )
-        if hyperdict['Normalization'][0] == True:
+        if hyperdict['Normalization'][0]:
             return Norm(kernel)
-        elif hyperdict['Normalization'][0] == False:
+        elif not hyperdict['Normalization'][0]:
             return kernel
         else:
             return NormalizationMolSize(
@@ -415,8 +416,8 @@ class GraphKernelConfig(BaseKernelConfig):
             n, term, microterm = key.split(':')
             # RBF kernels
             if n == 'RBF':
-                n_rbf = int(term)
-                self.sigma_RBF[n_rbf] = value
+                n_features = int(term)
+                self.rbf_length_scale[n_features] = value
             else:
                 n = int(n)
                 if term in ['Normalization', 'q', 'a_type', 'b_type']:
@@ -434,11 +435,11 @@ class GraphKernelConfig(BaseKernelConfig):
                 else:
                     hyperdict[key[0]][key[1]][0] = hyperparameters.pop(0)
 
-        if self.N_RBF == 0 or self.sigma_RBF_bounds == 'fixed':
+        if self.n_features == 0 or self.rbf_length_scale_bounds == 'fixed':
             assert len(hyperparameters) == 0
         else:
-            assert len(hyperparameters) == len(self.sigma_RBF)
-            self.sigma_RBF = hyperparameters
+            assert len(hyperparameters) == len(self.rbf_length_scale)
+            self.rbf_length_scale = hyperparameters
 
     @staticmethod
     def _get_order_keys(hyperdict: Dict) -> List[Union[List[str], str]]:
@@ -474,11 +475,11 @@ class GraphKernelConfig(BaseKernelConfig):
     def _update_kernel(self):
         N_MGK = self.N_MGK
         N_conv_MGK = self.N_conv_MGK
-        N_RBF = self.N_RBF
-        if N_MGK == 1 and N_conv_MGK == 0 and N_RBF == 0:
+        n_features = self.n_features
+        if N_MGK == 1 and N_conv_MGK == 0 and self.features_kernel_type is None:
             self.kernel = self._get_single_graph_kernel(
                 self.graph_hyperparameters[0])
-        elif N_MGK == 0 and N_conv_MGK == 1 and N_RBF == 0:
+        elif N_MGK == 0 and N_conv_MGK == 1 and self.features_kernel_type is None:
             self.kernel = self._get_conv_graph_kernel(
                 self.graph_hyperparameters[0])
         else:
@@ -489,12 +490,12 @@ class GraphKernelConfig(BaseKernelConfig):
             for i in range(N_MGK, N_MGK + N_conv_MGK):
                 kernels.append(
                     self._get_conv_graph_kernel(self.graph_hyperparameters[i]))
-            kernel = self._get_rbf_kernel()
+            kernel = self._get_features_kernel()
             if len(kernel) != 0:
-                kernels += self._get_rbf_kernel()
+                kernels += self._get_features_kernel()
                 composition = [(i,) for i in range(N_MGK + N_conv_MGK)] + \
                               [tuple(np.arange(N_MGK + N_conv_MGK,
-                                               N_RBF + N_MGK + N_conv_MGK))]
+                                               n_features + N_MGK + N_conv_MGK))]
             else:
                 composition = [(i,) for i in range(N_MGK + N_conv_MGK)]
             self.kernel = HybridKernel(
@@ -505,12 +506,12 @@ class GraphKernelConfig(BaseKernelConfig):
 
     def get_precomputed_kernel_config(self, dataset: Dataset):
         dataset.set_ignore_features_add(True)
-        N_RBF = self.N_RBF
-        self.N_RBF = 0
+        n_features = self.n_features
+        self.n_features = 0
         self._update_kernel()
         kernel_dict = self.get_kernel_dict(dataset.X_mol, dataset.X_repr.ravel())
         dataset.set_ignore_features_add(False)
-        self.N_RBF = N_RBF
+        self.n_features = n_features
         return get_kernel_config(dataset,
                                  graph_kernel_type='pre-computed',
                                  kernel_dict=kernel_dict)

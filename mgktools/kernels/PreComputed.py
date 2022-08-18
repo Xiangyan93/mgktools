@@ -6,7 +6,7 @@ from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
 
 import numpy as np
 
-from .BaseKernelConfig import BaseKernelConfig
+from .FeatureKernelConfig import FeatureKernelConfig
 from .HybridKernel import *
 
 
@@ -71,19 +71,20 @@ class PreComputedKernel:
         )
 
 
-class PreComputedKernelConfig(BaseKernelConfig):
+class PreComputedKernelConfig(FeatureKernelConfig):
     def __init__(self, kernel_dict: Dict,
-                 N_RBF: int = 0,
-                 sigma_RBF: List[float] = None,
-                 sigma_RBF_bounds: List[Tuple[float, float]] = None):
-        super().__init__(N_RBF, sigma_RBF, sigma_RBF_bounds)
-        if N_RBF == 0:
+                 features_kernel_type: Literal['dot_product', 'rbf'] = None,
+                 n_features: int = 0,
+                 rbf_length_scale: List[float] = None,
+                 rbf_length_scale_bounds: List[Tuple[float, float]] = None):
+        super().__init__(features_kernel_type, n_features, rbf_length_scale, rbf_length_scale_bounds)
+        if n_features == 0:
             self.kernel = self.get_preCalc_kernel(kernel_dict)
         else:
             kernels = [self.get_preCalc_kernel(kernel_dict)]
-            kernels += self._get_rbf_kernel()
+            kernels += self._get_features_kernel()
             composition = [(0,)] + \
-                          [tuple(np.arange(1, N_RBF + 1))]
+                          [tuple(np.arange(1, n_features + 1))]
             self.kernel = HybridKernel(
                 kernel_list=kernels,
                 composition=composition,

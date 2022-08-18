@@ -372,8 +372,6 @@ class Dataset:
                  graph_kernel_type: Literal['graph', 'pre-computed'] = None):
         self.data = data
         self.unify_datatype()
-        self.features_mol_normalize = False
-        self.features_add_normalize = False
         self.features_mol_scaler = features_mol_scaler
         self.features_add_scaler = features_add_scaler
         # Determine the Dataset.X.
@@ -514,11 +512,11 @@ class Dataset:
         return ignore_features_add
 
     def normalize_features(self):
-        if self.graph_kernel_type == 'graph' and self.X_raw_features_mol is not None and self.features_mol_normalize:
+        if self.X_raw_features_mol is not None:
             self.features_mol_scaler = StandardScaler().fit(self.X_raw_features_mol)
         else:
             self.features_mol_scaler = None
-        if self.X_raw_features_add is not None and self.features_add_normalize:
+        if self.X_raw_features_add is not None:
             self.features_add_scaler = StandardScaler().fit(self.X_raw_features_add)
         else:
             self.features_add_scaler = None
@@ -690,3 +688,29 @@ def to_numpy(list_: pd.Series) -> Optional[np.ndarray]:
             return None
         else:
             return ndarray
+
+
+def get_data(path: str,
+             pure_columns: List[str] = None,
+             mixture_columns: List[str] = None,
+             reaction_columns: List[str] = None,
+             feature_columns: List[str] = None,
+             target_columns: List[str] = None,
+             features_generator: List[str] = None,
+             features_combination: Literal['concat', 'mean'] = None,
+             mixture_type: Literal['single_graph', 'multi_graph'] = 'single_graph',
+             reaction_type: Literal['reaction', 'agent', 'reaction+agent'] = 'reaction',
+             group_reading: bool = False,
+             n_jobs: int = 8):
+    df = pd.read_csv(path)
+    return Dataset.from_df(df, pure_columns=pure_columns,
+                           mixture_columns=mixture_columns,
+                           reaction_columns=reaction_columns,
+                           feature_columns=feature_columns,
+                           target_columns=target_columns,
+                           features_generator=features_generator,
+                           features_combination=features_combination,
+                           mixture_type=mixture_type,
+                           reaction_type=reaction_type,
+                           group_reading=group_reading,
+                           n_jobs=n_jobs)

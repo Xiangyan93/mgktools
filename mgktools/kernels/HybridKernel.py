@@ -61,12 +61,14 @@ class HybridKernel:
                         gradient_matrix, gradient_matrix_list[i]]
             return covariance_matrix, gradient_matrix
         else:
-            covariance_matrix = 1
+            covariance_matrix = 1.
             for i, kernel in enumerate(self.kernel_list):
                 Xi = X_list[i]
                 Yi = Y_list[i] if Y is not None else None
                 output = kernel(Xi, Y=Yi, eval_gradient=False)
                 if self.hybrid_rule == 'product':
+                    if output.dtype == object:
+                        output = np.asarray(output, dtype=np.float64)
                     covariance_matrix *= output
             return covariance_matrix
 
