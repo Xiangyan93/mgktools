@@ -486,6 +486,9 @@ class Dataset:
         else:
             return self.data[0].features_add.shape[1]
 
+    def features_size(self):
+        return self.N_features_mol + self.N_features_add
+
     def copy(self):
         return copy.deepcopy(self)
 
@@ -701,9 +704,10 @@ def get_data(path: str,
              mixture_type: Literal['single_graph', 'multi_graph'] = 'single_graph',
              reaction_type: Literal['reaction', 'agent', 'reaction+agent'] = 'reaction',
              group_reading: bool = False,
-             n_jobs: int = 8):
+             graph_kernel_type: Literal['graph', 'pre-computed'] = None,
+             n_jobs: int = 8) -> Dataset:
     df = pd.read_csv(path)
-    return Dataset.from_df(df, pure_columns=pure_columns,
+    data = Dataset.from_df(df, pure_columns=pure_columns,
                            mixture_columns=mixture_columns,
                            reaction_columns=reaction_columns,
                            feature_columns=feature_columns,
@@ -714,3 +718,5 @@ def get_data(path: str,
                            reaction_type=reaction_type,
                            group_reading=group_reading,
                            n_jobs=n_jobs)
+    data.graph_kernel_type = graph_kernel_type
+    return data
