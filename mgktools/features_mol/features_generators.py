@@ -8,7 +8,7 @@ from descriptastorus.descriptors import rdDescriptors, rdNormalizedDescriptors
 
 
 class FeaturesGenerator:
-    def __init__(self, features_generator_name: str,
+    def __init__(self, features_generator_name: Union[str, Callable],
                  radius: int = 2,
                  num_bits: int = 2048):
         self.features_generator_name = features_generator_name
@@ -16,6 +16,8 @@ class FeaturesGenerator:
         self.num_bits = num_bits
 
     def __call__(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
+        if self.features_generator_name.__class__ != str:
+            return self.features_generator_name(mol)
         if self.features_generator_name == 'morgan':
             return self.morgan_binary_features_generator(mol)
         elif self.features_generator_name == 'morgan_count':

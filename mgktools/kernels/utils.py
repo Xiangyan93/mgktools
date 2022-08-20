@@ -26,7 +26,7 @@ def get_features_hyperparameters(
     -------
 
     """
-    if n_features == 0 or features_hyperparameters is None:
+    if n_features == 0:
         rbf_length_scale, rbf_length_scale_bounds = None, None
     elif features_hyperparameters_file is not None:
         rbf = json.load(open(features_hyperparameters_file))
