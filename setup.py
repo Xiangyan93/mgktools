@@ -30,7 +30,7 @@ setuptools.setup(
         'scipy>=1.6.2',
         'mendeleev>=0.7',
         'rxntools>=0.0.2',
-        'pycuda==2020.1',
+        'pycuda>=2022.1',
     ],
     author='Yan Xiang',
     author_email='1993.xiangyan@gmail.com',

@@ -56,6 +56,10 @@ def get_kernel_config(dataset: Dataset,
     if features_kernel_type is None:
         n_features = 0
         rbf_length_scale, rbf_length_scale_bounds = None, None
+    elif features_kernel_type == 'dot_product':
+        n_features = dataset.N_features_mol + dataset.N_features_add
+        rbf_length_scale = None
+        rbf_length_scale_bounds = None
     else:
         n_features = dataset.N_features_mol + dataset.N_features_add
         assert n_features != 0
@@ -65,9 +69,6 @@ def get_kernel_config(dataset: Dataset,
             rbf_length_scale_bounds,
             features_hyperparameters_file,
         )
-        if features_kernel_type == 'dot_product':
-            assert rbf_length_scale is None
-            assert rbf_length_scale_bounds is None
 
     if graph_kernel_type is None:
         params = {
