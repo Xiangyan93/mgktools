@@ -507,7 +507,7 @@ class GraphKernelConfig(FeatureKernelConfig):
     def get_precomputed_kernel_config(self, dataset: Dataset):
         dataset.set_ignore_features_add(True)
         n_features = self.n_features
-        self.n_features = 0
+        self.n_features = dataset.N_features_mol
         self._update_kernel()
         kernel_dict = self.get_kernel_dict(dataset.X_mol, dataset.X_repr.ravel())
         dataset.set_ignore_features_add(False)
