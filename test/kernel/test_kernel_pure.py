@@ -53,7 +53,7 @@ def test_graph_features(mgk_file, features_generator, features_kernel, normalize
                               target_columns=['targets'],
                               features_generator=features_generator)
     if normalize_feature:
-        dataset.normalize_features()
+        dataset.normalize_features_mol()
     dataset.graph_kernel_type = 'graph'
     N = len(dataset)
     kernel_config = get_kernel_config(dataset=dataset,

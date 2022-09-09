@@ -26,7 +26,7 @@ def test_only_molfeatures(features_generator):
                               target_columns=['targets_1'],
                               features_generator=features_generator)
     assert dataset.features_mol_scaler is None
-    dataset.normalize_features()
+    dataset.normalize_features_mol()
     assert dataset.features_mol_scaler is not None
     X = dataset.features_mol_scaler.transform(dataset.X_raw_features_mol)
     assert dataset.X == pytest.approx(X, 1e-5)
@@ -51,7 +51,7 @@ def test_graph_molfeatures(features_generator):
                               features_generator=features_generator)
     dataset.graph_kernel_type = 'graph'
     assert dataset.features_mol_scaler is None
-    dataset.normalize_features()
+    dataset.normalize_features_mol()
     assert dataset.features_mol_scaler is not None
     X = dataset.features_mol_scaler.transform(dataset.X_raw_features_mol)
     assert dataset.X_features_mol == pytest.approx(X, 1e-5)
@@ -68,7 +68,7 @@ def test_only_addfeatures():
                               target_columns=['targets_1'],
                               feature_columns=['feature'])
     assert dataset.features_add_scaler is None
-    dataset.normalize_features()
+    dataset.normalize_features_add()
     assert dataset.features_add_scaler is not None
     X = dataset.features_add_scaler.transform(dataset.X_raw_features_add)
     assert dataset.X == pytest.approx(X, 1e-5)
@@ -86,7 +86,7 @@ def test_graph_addfeatures():
                               feature_columns=['feature'])
     dataset.graph_kernel_type = 'graph'
     assert dataset.features_add_scaler is None
-    dataset.normalize_features()
+    dataset.normalize_features_add()
     assert dataset.features_add_scaler is not None
     X = dataset.features_add_scaler.transform(dataset.X_raw_features_add)
     assert dataset.X_features_add == pytest.approx(X, 1e-5)

@@ -514,11 +514,13 @@ class Dataset:
                 d.ignore_features_add = ignore_features_add
         return ignore_features_add
 
-    def normalize_features(self):
+    def normalize_features_mol(self):
         if self.X_raw_features_mol is not None:
             self.features_mol_scaler = StandardScaler().fit(self.X_raw_features_mol)
         else:
             self.features_mol_scaler = None
+
+    def normalize_features_add(self):
         if self.X_raw_features_add is not None:
             self.features_add_scaler = StandardScaler().fit(self.X_raw_features_add)
         else:
