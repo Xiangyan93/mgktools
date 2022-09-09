@@ -75,9 +75,9 @@ class PreComputedKernelConfig(FeatureKernelConfig):
     def __init__(self, kernel_dict: Dict,
                  features_kernel_type: Literal['dot_product', 'rbf'] = None,
                  n_features: int = 0,
-                 rbf_length_scale: List[float] = None,
-                 rbf_length_scale_bounds: List[Tuple[float, float]] = None):
-        super().__init__(features_kernel_type, n_features, rbf_length_scale, rbf_length_scale_bounds)
+                 features_hyperparameters: List[float] = None,
+                 features_hyperparameters_bounds: List[Tuple[float, float]] = None):
+        super().__init__(features_kernel_type, n_features, features_hyperparameters, features_hyperparameters_bounds)
         if n_features == 0:
             self.kernel = self.get_preCalc_kernel(kernel_dict)
         else:

@@ -7,46 +7,12 @@ from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
 from ..data import Dataset
 
 
-def get_features_hyperparameters(
-        n_features: int,
-        features_hyperparameters: List[float] = None,
-        features_hyperparameters_bounds: Union[List[Tuple[float, float]], Literal['fixed']] = None,
-        features_hyperparameters_file: str = None,
-) -> Tuple[Optional[List[float]], Optional[List[Tuple[float, float]]]]:
-    """
-
-    Parameters
-    ----------
-    n_features: dimension of RBF kernel
-    features_hyperparameters
-    features_hyperparameters_bounds
-    features_hyperparameters_file
-
-    Returns
-    -------
-
-    """
-    if n_features == 0:
-        rbf_length_scale, rbf_length_scale_bounds = None, None
-    elif features_hyperparameters_file is not None:
-        rbf = json.load(open(features_hyperparameters_file))
-        rbf_length_scale = rbf['rbf_length_scale']
-        rbf_length_scale_bounds = rbf['rbf_length_scale_bounds']
-    else:
-        rbf_length_scale = features_hyperparameters
-        rbf_length_scale_bounds = features_hyperparameters_bounds
-        if len(rbf_length_scale) != 1 and len(rbf_length_scale) != n_features:
-            raise ValueError(f'The number of features({n_features}) not equal to the number of hyperparameters'
-                             f'({len(rbf_length_scale)})')
-    return rbf_length_scale, rbf_length_scale_bounds
-
-
 def get_kernel_config(dataset: Dataset,
                       graph_kernel_type: Literal['graph', 'pre-computed', None],
                       # arguments for vectorized features.
                       features_kernel_type: Literal['dot_product', 'rbf'] = None,
-                      rbf_length_scale: List[float] = None,
-                      rbf_length_scale_bounds: Literal[List[Tuple[float]], "fixed"] = None,
+                      features_hyperparameters: List[float] = None,
+                      features_hyperparameters_bounds: Union[List[Tuple[float]], Literal['fixed']] = None,
                       features_hyperparameters_file: str = None,
                       # arguments for marginalized graph kernel
                       mgk_hyperparameters_files: List[str] = None,
@@ -55,27 +21,35 @@ def get_kernel_config(dataset: Dataset,
                       kernel_pkl: str = 'kernel.pkl'):
     if features_kernel_type is None:
         n_features = 0
-        rbf_length_scale, rbf_length_scale_bounds = None, None
-    elif features_kernel_type == 'dot_product':
-        n_features = dataset.N_features_mol + dataset.N_features_add
-        rbf_length_scale = None
-        rbf_length_scale_bounds = None
+        assert features_hyperparameters is None
+        assert features_hyperparameters_bounds is None
     else:
         n_features = dataset.N_features_mol + dataset.N_features_add
         assert n_features != 0
-        rbf_length_scale, rbf_length_scale_bounds = get_features_hyperparameters(
-            n_features,
-            rbf_length_scale,
-            rbf_length_scale_bounds,
-            features_hyperparameters_file,
-        )
+        if features_hyperparameters_file is not None:
+            assert features_hyperparameters is None
+            assert features_hyperparameters_bounds is None
+            f = json.load(open(features_hyperparameters_file))
+            features_hyperparameters = f['features_hyperparameters']
+            features_hyperparameters_bounds = f['features_hyperparameters_bounds']
+        else:
+            if features_kernel_type == 'dot_product':
+                assert len(features_hyperparameters) == 1
+                if features_hyperparameters_bounds != "fixed":
+                    assert len(features_hyperparameters_bounds) == 1
+            elif features_kernel_type == 'rbf':
+                if len(features_hyperparameters) != 1 and len(features_hyperparameters) != n_features:
+                    raise ValueError(f'The number of features({n_features}) not equal to the number of hyperparameters'
+                                     f'({len(features_hyperparameters)})')
+            else:
+                raise ValueError
 
     if graph_kernel_type is None:
         params = {
             'features_kernel_type': features_kernel_type,
             'n_features': n_features,
-            'rbf_length_scale': rbf_length_scale,  # np.concatenate(rbf_length_scale),
-            'rbf_length_scale_bounds': rbf_length_scale_bounds,  # * n_features,
+            'features_hyperparameters': features_hyperparameters,  # np.concatenate(rbf_length_scale),
+            'features_hyperparameters_bounds': features_hyperparameters_bounds,  # * n_features,
         }
         from mgktools.kernels.FeatureKernelConfig import FeatureKernelConfig
         return FeatureKernelConfig(**params)
@@ -91,8 +65,8 @@ def get_kernel_config(dataset: Dataset,
             'unique': False,
             'features_kernel_type': features_kernel_type,
             'n_features': n_features,
-            'rbf_length_scale': rbf_length_scale,  # np.concatenate(rbf_length_scale),
-            'rbf_length_scale_bounds': rbf_length_scale_bounds,  # * n_features,
+            'features_hyperparameters': features_hyperparameters,  # np.concatenate(rbf_length_scale),
+            'features_hyperparameters_bounds': features_hyperparameters_bounds,  # * n_features,
         }
         from mgktools.kernels.GraphKernel import GraphKernelConfig
         return GraphKernelConfig(**params)
@@ -108,8 +82,8 @@ def get_kernel_config(dataset: Dataset,
             'kernel_dict': kernel_dict,
             'features_kernel_type': features_kernel_type,
             'n_features': n_features,
-            'rbf_length_scale': rbf_length_scale,
-            'rbf_length_scale_bounds': rbf_length_scale_bounds,  # * n_features,
+            'features_hyperparameters': features_hyperparameters,
+            'features_hyperparameters_bounds': features_hyperparameters_bounds,  # * n_features,
         }
         from mgktools.kernels.PreComputed import PreComputedKernelConfig
         return PreComputedKernelConfig(**params)

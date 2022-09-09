@@ -47,7 +47,7 @@ class HybridKernel:
                 Yi = Y_list[i] if Y is not None else None
                 output = kernel(Xi, Y=Yi, eval_gradient=True)
                 if self.hybrid_rule == 'product':
-                    covariance_matrix *= output[0]
+                    covariance_matrix *= np.asarray(output[0], dtype=np.float64)
                     for j in range(self.nkernel):
                         if j == i:
                             gradient_matrix_list[j] = gradient_matrix_list[j] * output[1]

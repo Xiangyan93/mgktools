@@ -28,6 +28,7 @@ def test_interpret_training_mols(testset):
         n_jobs=6)
     assert df_interpret['contribution_value'].sum() == pytest.approx(y_pred, 1e-5)
 
+
 @pytest.mark.parametrize('testset', [
     (additive_pnorm),
     (product_pnorm),

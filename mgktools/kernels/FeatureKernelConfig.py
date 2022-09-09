@@ -14,12 +14,12 @@ class FeatureKernelConfig:
     def __init__(self,
                  features_kernel_type: Literal['dot_product', 'rbf'] = None,
                  n_features: int = 0,
-                 rbf_length_scale: List[float] = None,
-                 rbf_length_scale_bounds: List[Tuple[float]] = None):
+                 features_hyperparameters: List[float] = None,
+                 features_hyperparameters_bounds: List[Tuple[float]] = None):
         self.features_kernel_type = features_kernel_type
         self.n_features = n_features
-        self.rbf_length_scale = rbf_length_scale
-        self.rbf_length_scale_bounds = rbf_length_scale_bounds
+        self.features_hyperparameters = features_hyperparameters
+        self.features_hyperparameters_bounds = features_hyperparameters_bounds
 
     def get_kernel_dict(self, X: np.ndarray, X_labels: List[str]) -> Dict:
         K = self.kernel(X)
@@ -36,14 +36,15 @@ class FeatureKernelConfig:
 
     def _get_features_kernel(self) -> List:
         if self.features_kernel_type == 'dot_product':
-            return [DotProduct()]
+            return [DotProduct(sigma_0=self.features_hyperparameters[0],
+                               sigma_0_bounds=self.features_hyperparameters_bounds[0])]
         elif self.features_kernel_type == 'rbf':
             assert self.n_features != 0
-            if len(self.rbf_length_scale) != 1 and len(self.rbf_length_scale) != self.n_features:
+            if len(self.features_hyperparameters) != 1 and len(self.features_hyperparameters) != self.n_features:
                 raise ValueError('features_mol and hyperparameters must be the'
                                  ' same length')
-            add_kernel = RBF(length_scale=self.rbf_length_scale,
-                             length_scale_bounds=self.rbf_length_scale_bounds)
+            add_kernel = RBF(length_scale=self.features_hyperparameters,
+                             length_scale_bounds=self.features_hyperparameters_bounds)
             # ConstantKernel(1.0, (1e-3, 1e3)) * \
             return [add_kernel]
         else:
@@ -52,11 +53,11 @@ class FeatureKernelConfig:
     # functions for Bayesian optimization of hyperparameters.
     def get_space(self):
         SPACE = dict()
-        if self.rbf_length_scale is not None:
-            for i in range(len(self.rbf_length_scale)):
-                hp_key = 'RBF:%d:' % i
-                hp_ = self._get_hp(hp_key, [self.rbf_length_scale[i],
-                                            self.rbf_length_scale_bounds[i]])
+        if self.features_hyperparameters is not None:
+            for i in range(len(self.features_hyperparameters)):
+                hp_key = 'features_kernel:%d:' % i
+                hp_ = self._get_hp(hp_key, [self.features_hyperparameters[i],
+                                            self.features_hyperparameters_bounds[i]])
                 if hp_ is not None:
                     SPACE[hp_key] = hp_
         return SPACE
@@ -65,9 +66,9 @@ class FeatureKernelConfig:
         for key, value in hyperdict.items():
             n, term, microterm = key.split(':')
             # RBF kernels
-            if n == 'RBF':
+            if n == 'features_kernel':
                 n_features = int(term)
-                self.rbf_length_scale[n_features] = value
+                self.features_hyperparameters[n_features] = value
         self._update_kernel()
 
     @staticmethod
@@ -86,12 +87,12 @@ class FeatureKernelConfig:
 
     # save functions.
     def save_hyperparameters(self, path: str):
-        if self.rbf_length_scale is not None:
+        if self.features_hyperparameters is not None:
             rbf = {
-                'rbf_length_scale': self.rbf_length_scale,
-                'rbf_length_scale_bounds': self.rbf_length_scale_bounds
+                'features_hyperparameters': self.features_hyperparameters,
+                'features_hyperparameters_bounds': self.features_hyperparameters_bounds
             }
-            open(os.path.join(path, 'rbf_length_scale.json'), 'w').write(
+            open(os.path.join(path, 'features_hyperparameters.json'), 'w').write(
                 json.dumps(rbf, indent=1, sort_keys=False))
 
     def save_kernel_matrix(self, path: str, X: np.ndarray, X_labels: List[str]):
