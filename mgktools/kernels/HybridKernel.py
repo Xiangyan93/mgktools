@@ -121,7 +121,7 @@ class HybridKernel:
         for i, kernel in enumerate(self.kernel_list):
             if i == 0:
                 bounds = self.kernel_list[0].bounds
-            else:
+            elif kernel.bounds.shape != (0,):
                 bounds = np.r_[bounds, kernel.bounds]
         return bounds
 

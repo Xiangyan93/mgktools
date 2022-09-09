@@ -415,9 +415,9 @@ class GraphKernelConfig(FeatureKernelConfig):
         for key, value in hyperdict.items():
             n, term, microterm = key.split(':')
             # RBF kernels
-            if n == 'RBF':
+            if n == 'features_kernel':
                 n_features = int(term)
-                self.rbf_length_scale[n_features] = value
+                self.features_hyperparameters[n_features] = value
             else:
                 n = int(n)
                 if term in ['Normalization', 'q', 'a_type', 'b_type']:

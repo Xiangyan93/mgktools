@@ -37,7 +37,8 @@ class FeatureKernelConfig:
     def _get_features_kernel(self) -> List:
         if self.features_kernel_type == 'dot_product':
             return [DotProduct(sigma_0=self.features_hyperparameters[0],
-                               sigma_0_bounds=self.features_hyperparameters_bounds[0])]
+                               sigma_0_bounds=self.features_hyperparameters_bounds[0]
+                               if self.features_hyperparameters_bounds != 'fixed' else 'fixed')]
         elif self.features_kernel_type == 'rbf':
             assert self.n_features != 0
             if len(self.features_hyperparameters) != 1 and len(self.features_hyperparameters) != self.n_features:
@@ -53,7 +54,7 @@ class FeatureKernelConfig:
     # functions for Bayesian optimization of hyperparameters.
     def get_space(self):
         SPACE = dict()
-        if self.features_hyperparameters is not None:
+        if self.features_hyperparameters is not None and self.features_hyperparameters_bounds != 'fixed':
             for i in range(len(self.features_hyperparameters)):
                 hp_key = 'features_kernel:%d:' % i
                 hp_ = self._get_hp(hp_key, [self.features_hyperparameters[i],
