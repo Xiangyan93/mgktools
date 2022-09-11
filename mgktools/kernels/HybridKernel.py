@@ -59,7 +59,7 @@ class HybridKernel:
                 if i != 0:
                     gradient_matrix = np.c_[
                         gradient_matrix, gradient_matrix_list[i]]
-            return covariance_matrix, gradient_matrix
+            return covariance_matrix, np.asarray(gradient_matrix, dtype=np.float64)
         else:
             covariance_matrix = 1.
             for i, kernel in enumerate(self.kernel_list):

@@ -4,24 +4,14 @@ import os
 from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
 import pandas as pd
 import numpy as np
-from collections import defaultdict
-from sklearn.cluster import KMeans
-from sklearn.manifold import SpectralEmbedding
 from sklearn.metrics import (
-    mean_squared_error,
-    mean_absolute_error,
-    r2_score,
     accuracy_score,
-    roc_auc_score,
     precision_score,
     recall_score,
     f1_score
 )
 from ..data import Dataset, dataset_split
-from ..kernels import PreComputedKernel
-
-Metric = Literal['roc-auc', 'accuracy', 'precision', 'recall', 'f1_score',
-                 'rmse', 'mae', 'mse', 'r2', 'max']
+from .metric import Metric, eval_metric_func
 
 
 class Evaluator:
@@ -269,7 +259,7 @@ class Evaluator:
     def _eval_metric(self,
                      y: np.ndarray,  # 1-d or 2-d array.
                      y_pred: np.ndarray,  # 1-d or 2-d array.
-                     metric: str,
+                     metric: Metric,
                      task_type: Literal['regression', 'binary', 'multi-class']) -> float:
         if y.ndim == 2 and y_pred.ndim == 2:
             num_tasks = y.shape[1]
@@ -286,7 +276,7 @@ class Evaluator:
     def _metric_func(self,
                      y: np.ndarray,  # 1-d array.
                      y_pred: np.ndarray,  # 1-d array.
-                     metric: str,
+                     metric: Metric,
                      task_type: Literal['regression', 'binary', 'multi-class']) -> float:
         # y_pred has nan may happen when train_y are all 1 (or 0).
         if task_type == 'binary' and y_pred.dtype != object and True in np.isnan(y_pred):
@@ -300,32 +290,8 @@ class Evaluator:
             if len(set(y)) == 1:
                 return np.nan
 
-        if task_type == 'regression':
-            if metric == 'r2':
-                return r2_score(y, y_pred)
-            elif metric == 'mae':
-                return mean_absolute_error(y, y_pred)
-            elif metric == 'mse':
-                return mean_squared_error(y, y_pred)
-            elif metric == 'rmse':
-                return np.sqrt(self._metric_func(y, y_pred, 'mse', 'regression'))
-            elif metric == 'max':
-                return np.max(abs(y - y_pred))
-            else:
-                raise RuntimeError(f'Unsupported metrics {metric} for regression task.')
-        elif task_type == 'binary':
-            if metric == 'roc-auc':
-                return roc_auc_score(y, y_pred)
-            elif metric == 'accuracy':
-                return accuracy_score(y, y_pred)
-            elif metric == 'precision':
-                return precision_score(y, y_pred)
-            elif metric == 'recall':
-                return recall_score(y, y_pred)
-            elif metric == 'f1_score':
-                return f1_score(y, y_pred)
-            else:
-                raise RuntimeError(f'Unsupported metrics {metric} for binary classification task.')
+        if task_type in ['regression', 'binary']:
+            return eval_metric_func(y, y_pred=y_pred, metric=metric)
         elif task_type == 'multi-class':
             if metric == 'accuracy':
                 return accuracy_score(y, y_pred)
