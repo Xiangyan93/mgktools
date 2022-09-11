@@ -79,7 +79,7 @@ class HybridKernel:
         if self.hybrid_rule == 'product':
             return np.product(diag_list, axis=0)
         else:
-            raise Exception('Unknown combined rule %s' % self.hybrid_rule)
+            raise Exception('Unknown hybrid rule %s' % self.hybrid_rule)
 
     def is_stationary(self):
         return False
@@ -134,7 +134,7 @@ class HybridKernel:
         return dict(
             kernel_list=self.kernel_list,
             composition=self.composition,
-            combined_rule=self.hybrid_rule,
+            hybrid_rule=self.hybrid_rule,
         )
 
     def load(self, result_dir):
