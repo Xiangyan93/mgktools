@@ -476,10 +476,10 @@ class GraphKernelConfig(FeatureKernelConfig):
         N_MGK = self.N_MGK
         N_conv_MGK = self.N_conv_MGK
         n_features = self.n_features
-        if N_MGK == 1 and N_conv_MGK == 0 and self.features_kernel_type is None:
+        if N_MGK == 1 and N_conv_MGK == 0 and n_features == 0:
             self.kernel = self._get_single_graph_kernel(
                 self.graph_hyperparameters[0])
-        elif N_MGK == 0 and N_conv_MGK == 1 and self.features_kernel_type is None:
+        elif N_MGK == 0 and N_conv_MGK == 1 and n_features == 0:
             self.kernel = self._get_conv_graph_kernel(
                 self.graph_hyperparameters[0])
         else:
