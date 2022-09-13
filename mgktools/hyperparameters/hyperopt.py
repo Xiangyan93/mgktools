@@ -83,7 +83,7 @@ def bayesian_optimization(save_dir: Optional[str],
                                   split_sizes=(0.8, 0.2),
                                   num_folds=1 if split_type == 'loocv' else 10,
                                   return_std=True if task_type == 'regression' else False,
-                                  return_proba=False if task_type == 'regression' else True,
+                                  return_proba=False if task_type == 'regression' or model_type == 'gpr' else True,
                                   n_similar=None,
                                   verbose=False)
             result = evaluator.evaluate()
