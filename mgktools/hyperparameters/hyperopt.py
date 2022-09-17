@@ -26,7 +26,7 @@ def save_best_params(save_dir: str,
 
 
 def bayesian_optimization(save_dir: Optional[str],
-                          dataset: Dataset,
+                          datasets: List[Dataset],
                           kernel_config,
                           task_type: Literal['regression', 'binary', 'multi-class'],
                           model_type: Literal['gpr', 'gpr-sod', 'gpr-nystrom', 'gpr-nle', 'svr', 'gpc', 'svc'],
@@ -52,43 +52,48 @@ def bayesian_optimization(save_dir: Optional[str],
     hyperdicts = []
     results = []
 
-    def objective(hyperdict) -> float:
+    def objective(hyperdict) -> Union[float, np.ndarray]:
         hyperdicts.append(hyperdict.copy())
         alpha_ = hyperdict.pop('alpha', alpha)
         C_ = hyperdict.pop('C', C)
         kernel_config.update_from_space(hyperdict)
+        obj = []
         if metric == 'log_likelihood':
             assert model_type in ['gpr', 'gpr-sod', 'gpr-nystrom', 'gpr-nle']
             kernel = kernel_config.kernel
             model = set_model(model_type=model_type,
                               kernel=kernel,
                               alpha=alpha_)
-            dataset.graph_kernel_type = 'graph'
-            result = model.log_marginal_likelihood(X=dataset.X, y=dataset.y)
+            for dataset in datasets:
+                dataset.graph_kernel_type = 'graph'
+                obj.append(model.log_marginal_likelihood(X=dataset.X, y=dataset.y))
+            result = np.mean(obj)
             results.append(result)
             return result
         else:
-            kernel = kernel_config.get_precomputed_kernel_config(dataset).kernel
-            model = set_model(model_type=model_type,
-                              kernel=kernel,
-                              alpha=alpha_,
-                              C=C_)
-            dataset.graph_kernel_type = 'pre-computed'
-            evaluator = Evaluator(save_dir=save_dir,
-                                  dataset=dataset,
-                                  model=model,
-                                  task_type=task_type,
-                                  metrics=[metric],
-                                  split_type=split_type,
-                                  split_sizes=(0.8, 0.2),
-                                  num_folds=1 if split_type == 'loocv' else 10,
-                                  return_std=True if task_type == 'regression' else False,
-                                  return_proba=False if task_type == 'regression' or model_type == 'gpr' else True,
-                                  n_similar=None,
-                                  verbose=False)
-            result = evaluator.evaluate()
+            for dataset in datasets:
+                kernel = kernel_config.get_precomputed_kernel_config(dataset).kernel
+                model = set_model(model_type=model_type,
+                                  kernel=kernel,
+                                  alpha=alpha_,
+                                  C=C_)
+                dataset.graph_kernel_type = 'pre-computed'
+                evaluator = Evaluator(save_dir=save_dir,
+                                      dataset=dataset,
+                                      model=model,
+                                      task_type=task_type,
+                                      metrics=[metric],
+                                      split_type=split_type,
+                                      split_sizes=(0.8, 0.2),
+                                      num_folds=1 if split_type == 'loocv' else 10,
+                                      return_std=True if task_type == 'regression' else False,
+                                      return_proba=False if task_type == 'regression' or model_type == 'gpr' else True,
+                                      n_similar=None,
+                                      verbose=False)
+                obj.append(evaluator.evaluate())
+                dataset.graph_kernel_type = 'graph'
+            result = np.mean(obj)
             results.append(result)
-            dataset.graph_kernel_type = 'graph'
             if metric in ['rmse', 'mae', 'mse', 'max']:
                 return result
             else:

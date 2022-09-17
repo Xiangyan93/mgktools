@@ -27,7 +27,7 @@ def test_bayesian(mgk_file, split_type):
                                       graph_kernel_type='graph',
                                       mgk_hyperparameters_files=[mgk_file])
     best_hyperdict, results, hyperdicts = bayesian_optimization(save_dir=None,
-                                                                dataset=dataset,
+                                                                datasets=[dataset],
                                                                 kernel_config=kernel_config,
                                                                 model_type='gpr',
                                                                 task_type='regression',
@@ -37,7 +37,17 @@ def test_bayesian(mgk_file, split_type):
                                                                 alpha_bounds=(0.001, 0.02),
                                                                 d_alpha=0.001)
     best_hyperdict, results, hyperdicts = bayesian_optimization(save_dir=None,
-                                                                dataset=dataset,
+                                                                datasets=[dataset, dataset],
+                                                                kernel_config=kernel_config,
+                                                                model_type='gpr',
+                                                                task_type='regression',
+                                                                metric='rmse',
+                                                                split_type=split_type,
+                                                                num_iters=2,
+                                                                alpha_bounds=(0.001, 0.02),
+                                                                d_alpha=0.001)
+    best_hyperdict, results, hyperdicts = bayesian_optimization(save_dir=None,
+                                                                datasets=[dataset],
                                                                 kernel_config=kernel_config,
                                                                 model_type='gpr',
                                                                 task_type='regression',
