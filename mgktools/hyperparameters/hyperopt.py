@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
+import gc
 import numpy as np
 from hyperopt import fmin, hp, tpe
 from ..data import Dataset
@@ -67,6 +68,8 @@ def bayesian_optimization(save_dir: Optional[str],
             for dataset in datasets:
                 dataset.graph_kernel_type = 'graph'
                 obj.append(model.log_marginal_likelihood(X=dataset.X, y=dataset.y))
+            del model
+            gc.collect()
             result = np.mean(obj)
             results.append(result)
             return result
@@ -91,6 +94,8 @@ def bayesian_optimization(save_dir: Optional[str],
                                       n_similar=None,
                                       verbose=False)
                 obj.append(evaluator.evaluate())
+                del model, evaluator
+                gc.collect()
                 dataset.graph_kernel_type = 'graph'
             result = np.mean(obj)
             results.append(result)
