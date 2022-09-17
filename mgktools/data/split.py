@@ -147,7 +147,7 @@ def dataset_split(dataset, split_type: Literal['random', 'scaffold_balanced', 'n
     random = Random(seed)
     data = []
     if split_type == 'random':
-        assert sum(sizes) == 1
+        assert abs(sum(sizes) - 1) < 1e-10
         indices = list(range(len(dataset.data)))
         random.shuffle(indices)
         end = 0
