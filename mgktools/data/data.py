@@ -492,21 +492,6 @@ class Dataset:
     def copy(self):
         return copy.deepcopy(self)
 
-    """
-    def set_dataset_status(self, graph_kernel_type: Literal['graph', 'preCalc']):
-        self.graph_kernel_type = graph_kernel_type
-        
-    #def update_args(self, args: KernelArgs):
-    #    if args.ignore_features_add:
-    #        self.set_ignore_features_add(True)
-    #    else:
-    #        self.set_ignore_features_add(False)
-    #    self.graph_kernel_type = args.graph_kernel_type
-    #    self.features_mol_normalize = args.features_mol_normalize
-    #    self.features_add_normalize = args.features_add_normalize
-    #    self.normalize_features()
-    """
-
     def set_ignore_features_add(self, ignore_features_add: bool) -> bool:
         self.ignore_features_add = ignore_features_add
         if self.data is not None:
@@ -545,6 +530,11 @@ class Dataset:
             HashGraph.unify_datatype(graphs, inplace=True)
         else:
             HashGraph.unify_datatype(X, inplace=True)
+
+    def clear_cookie(self):
+        for X in self.X_graph:
+            for g in X:
+                g.cookie.clear()
 
     def save(self, path, filename='dataset.pkl', overwrite=False):
         f_dataset = os.path.join(path, filename)
