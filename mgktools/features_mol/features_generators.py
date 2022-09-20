@@ -14,6 +14,9 @@ class FeaturesGenerator:
         self.features_generator_name = features_generator_name
         self.radius = radius
         self.num_bits = num_bits
+        if features_generator_name in ['morgan', 'morgan_count']:
+            assert self.radius is not None
+            assert self.num_bits is not None
 
     def __call__(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         if self.features_generator_name.__class__ != str:
@@ -28,10 +31,6 @@ class FeaturesGenerator:
             return self.rdkit_2d_normalized_features_generator(mol)
         else:
             raise ValueError(f'unknown features generator: {self.features_generator_name}')
-
-    def get_features_generator(self) -> Callable[[Union[str, Chem.Mol]], np.ndarray]:
-        if self.features_generator_name == 'morgan':
-            return self.morgan_binary_features_generator
 
     def morgan_binary_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         """
