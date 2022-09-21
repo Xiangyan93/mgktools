@@ -140,7 +140,7 @@ class MultiMolecularGraph2D:
         self.features_mol = None
         # set concentration
         if concentration is None:
-            self.concentration = [1.0] * len(data)
+            self.concentration = [1.0 / len(data)] * len(data)
         else:
             self.concentration = concentration
         graphs = [d.graph for d in self.data]
@@ -191,15 +191,14 @@ class MultiMolecularGraph2D:
     def set_features_mol(self, features_generator: List[str] = None,
                          features_combination: Literal['concat', 'mean'] = None):
         if features_generator is None:
-            self.features_mol = None
-            return None
+            return
         if len(self.data) != 1:
             self.features_mol = []
             for i, d in enumerate(self.data):
                 d.set_features_mol(features_generator)
                 self.features_mol.append(d.features_mol * self.concentration[i])
             if features_combination == 'mean':
-                self.features_mol = np.asarray(self.features_mol).mean(axis=0).reshape(1, -1)
+                self.features_mol = np.mean(self.features_mol, axis=0).reshape(1, -1)
             elif features_combination == 'concat':
                 self.features_mol = np.concatenate(self.features_mol).reshape(1, -1)
             else:
