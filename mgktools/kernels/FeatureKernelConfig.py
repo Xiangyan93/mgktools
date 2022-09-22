@@ -90,6 +90,7 @@ class FeatureKernelConfig:
     def save_hyperparameters(self, path: str):
         if self.features_hyperparameters is not None:
             rbf = {
+                'features_kernel_type': self.features_kernel_type,
                 'features_hyperparameters': self.features_hyperparameters,
                 'features_hyperparameters_bounds': self.features_hyperparameters_bounds
             }

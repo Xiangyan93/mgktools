@@ -37,7 +37,6 @@ class HybridKernel:
 
     def __call__(self, X: np.ndarray, Y: np.ndarray = None,
                  eval_gradient: bool = False):
-        print(X.shape)
         X_list = self.get_X_list(X)
         Y_list = self.get_X_list(Y) if Y is not None else None
         if eval_gradient:
@@ -66,7 +65,6 @@ class HybridKernel:
             for i, kernel in enumerate(self.kernel_list):
                 Xi = X_list[i]
                 Yi = Y_list[i] if Y is not None else None
-                # print(Xi)
                 output = kernel(Xi, Y=Yi, eval_gradient=False)
                 if self.hybrid_rule == 'product':
                     if output.dtype == object:

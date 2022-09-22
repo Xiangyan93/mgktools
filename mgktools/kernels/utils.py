@@ -19,6 +19,15 @@ def get_kernel_config(dataset: Dataset,
                       # arguments for pre-computed kernel
                       kernel_dict: Dict = None,
                       kernel_pkl: str = 'kernel.pkl'):
+    if features_hyperparameters_file is not None:
+        assert features_hyperparameters is None
+        assert features_hyperparameters_bounds is None
+        f = json.load(open(features_hyperparameters_file))
+        features_kernel_type = f['features_kernel_type']
+        features_hyperparameters = f['features_hyperparameters']
+        features_hyperparameters_bounds = f['features_hyperparameters_bounds']
+        assert features_kernel_type in ['rbf', 'dot_product']
+
     if features_kernel_type is None:
         n_features = 0
         assert features_hyperparameters is None
@@ -26,23 +35,16 @@ def get_kernel_config(dataset: Dataset,
     else:
         n_features = dataset.N_features_mol + dataset.N_features_add
         assert n_features != 0
-        if features_hyperparameters_file is not None:
-            assert features_hyperparameters is None
-            assert features_hyperparameters_bounds is None
-            f = json.load(open(features_hyperparameters_file))
-            features_hyperparameters = f['features_hyperparameters']
-            features_hyperparameters_bounds = f['features_hyperparameters_bounds']
+        if features_kernel_type == 'dot_product':
+            assert len(features_hyperparameters) == 1
+            if features_hyperparameters_bounds != "fixed":
+                assert len(features_hyperparameters_bounds) == 1
+        elif features_kernel_type == 'rbf':
+            if len(features_hyperparameters) != 1 and len(features_hyperparameters) != n_features:
+                raise ValueError(f'The number of features({n_features}) not equal to the number of hyperparameters'
+                                 f'({len(features_hyperparameters)})')
         else:
-            if features_kernel_type == 'dot_product':
-                assert len(features_hyperparameters) == 1
-                if features_hyperparameters_bounds != "fixed":
-                    assert len(features_hyperparameters_bounds) == 1
-            elif features_kernel_type == 'rbf':
-                if len(features_hyperparameters) != 1 and len(features_hyperparameters) != n_features:
-                    raise ValueError(f'The number of features({n_features}) not equal to the number of hyperparameters'
-                                     f'({len(features_hyperparameters)})')
-            else:
-                raise ValueError
+            raise ValueError
 
     if graph_kernel_type is None:
         params = {
