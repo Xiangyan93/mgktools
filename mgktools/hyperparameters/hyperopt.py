@@ -95,10 +95,11 @@ def bayesian_optimization(save_dir: Optional[str],
                 dataset.graph_kernel_type = 'graph'
                 dataset.clear_cookie()
             result = np.mean(obj)
-            results.append(result)
             if metric in ['rmse', 'mae', 'mse', 'max']:
+                results.append(result)
                 return result
             else:
+                results.append(-result)
                 return -result
 
     SPACE = kernel_config.get_space()
