@@ -111,7 +111,8 @@ def data_split_index(n_samples: int,
         for c_index in class_index:
             for i, idx in enumerate(data_split_index(n_samples=len(c_index),
                                                      split_type='random',
-                                                     sizes=sizes)):
+                                                     sizes=sizes,
+                                                     seed=seed)):
                 split_index[i] += list(np.array(c_index)[idx])
     elif split_type in ['scaffold_random', 'scaffold_order']:
         index_size = get_split_sizes(n_samples, split_ratio=sizes)
