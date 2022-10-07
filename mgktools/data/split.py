@@ -7,6 +7,9 @@ from typing import Dict, List, Set, Tuple, Union
 from rdkit import Chem
 from rdkit.Chem.Scaffolds import MurckoScaffold
 from tqdm import tqdm
+import math
+from logging import Logger
+import numpy as np
 from .data import Dataset
 
 
@@ -54,77 +57,129 @@ def scaffold_to_smiles(mols: Union[List[str], List[Chem.Mol]],
     return scaffolds
 
 
-def scaffold_split(dataset: Dataset,
-                   sizes: Tuple[float, float] = (0.8, 0.2),
-                   balanced: bool = False,
-                   seed: int = 0) -> List:
-    """ Split a class 'Dataset' into training and test sets.
+def get_split_sizes(n_samples: int,
+                    split_ratio: List[float]):
+    if not np.isclose(sum(split_ratio), 1.0):
+        raise ValueError(f"Split split_ratio do not sum to 1. Received splits: {split_ratio}")
+    if any([size < 0 for size in split_ratio]):
+        raise ValueError(f"Split split_ratio must be non-negative. Received splits: {split_ratio}")
+    print(split_ratio)
+    acc_ratio = np.cumsum([0.] + split_ratio)
+    split_sizes = [math.ceil(acc_ratio[i + 1] * n_samples) - math.ceil(acc_ratio[i] * n_samples)
+                   for i in range(len(acc_ratio) - 1)]
+    assert sum(split_sizes) == n_samples
+    return split_sizes
 
-    Parameters
-    ----------
-    dataset: class ‘Dataset’
-    sizes: [float, float].
-        sizes are the percentages of molecules in training and test sets.
-    balanced:
-        Whether to balance the sizes of scaffolds in each set rather than putting the smallest in test set.
-    seed: int
-        Random seed for shuffling when doing balanced splitting.
-    Returns
-    -------
-    [Dataset, Dataset]
-    """
-    assert sum(sizes) == 1
 
-    # Split
-    train_size, test_size = sizes[0] * len(dataset), sizes[1] * len(dataset)
-    train, test = [], []
-    train_scaffold_count, test_scaffold_count = 0, 0
+def data_split_index(n_samples: int,
+                     mols: List[Union[str, Chem.Mol]] = None,
+                     targets: List = None,
+                     split_type: Literal['random', 'scaffold_order', 'scaffold_random', 'init_al', 'stratified',
+                                         'n_heavy'] = 'random',
+                     sizes: List[float] = [0.8, 0.2],
+                     n_samples_per_class: int = None,
+                     n_heavy_cutoff: int = None,
+                     seed: int = 0,
+                     logger: Logger = None):
+    if logger is not None:
+        info = logger.info
+        warn = logger.warning
+    else:
+        info = print
+        warn = print
 
-    # Map from scaffold to index in the data
-    scaffold_to_indices = scaffold_to_smiles(dataset.mols, use_indices=True)
-
-    # Seed randomness
     random = Random(seed)
-
-    if balanced:  # Put stuff that's bigger than half the val/test size into train, rest just order randomly
-        index_sets = list(scaffold_to_indices.values())
-        big_index_sets = []
-        small_index_sets = []
-        for index_set in index_sets:
-            if len(index_set) > test_size / 2:
-                big_index_sets.append(index_set)
-            else:
-                small_index_sets.append(index_set)
-        random.seed(seed)
-        random.shuffle(big_index_sets)
-        random.shuffle(small_index_sets)
-        index_sets = big_index_sets + small_index_sets
-    else:  # Sort from largest to smallest scaffold sets
+    np.random.seed(seed)
+    split_index = [[] for size in sizes]
+    if split_type == 'random':
+        indices = list(range(n_samples))
+        random.shuffle(indices)
+        index_size = get_split_sizes(n_samples, split_ratio=sizes)
+        end = 0
+        for i, size in enumerate(index_size):
+            start = end
+            end = start + size
+            split_index[i] = indices[start:end]
+    elif split_type == 'stratified':
+        class_list = list(np.unique(targets))
+        assert len(class_list) > 1
+        num_class = len(class_list)
+        if num_class > 10:
+            warn('You are splitting a classification dataset with more than 10 classes.')
+        class_index = [[] for c in class_list]
+        for i, y in enumerate(targets):
+            class_index[class_list.index(y)].append(i)
+        for c_index in class_index:
+            for i, idx in enumerate(data_split_index(n_samples=len(c_index),
+                                                     split_type='random',
+                                                     sizes=sizes)):
+                split_index[i] += list(np.array(c_index)[idx])
+    elif split_type in ['scaffold_random', 'scaffold_order']:
+        index_size = get_split_sizes(n_samples, split_ratio=sizes)
+        if mols[0].__class__ == 'str':
+            mols = [Chem.MolFromSmiles(s) for s in mols]
+        scaffold_to_indices = scaffold_to_smiles(mols, use_indices=True)
         index_sets = sorted(list(scaffold_to_indices.values()),
                             key=lambda index_set: len(index_set),
                             reverse=True)
 
-    for index_set in index_sets:
-        if len(train) + len(index_set) <= train_size:
-            train += index_set
-            train_scaffold_count += 1
-        else:
-            test += index_set
-            test_scaffold_count += 1
+        scaffold_count = [0 for size in sizes]
+        index = [0, 1]
+        for index_set in index_sets:
+            if split_type == 'scaffold_random':
+                random.shuffle(index)
+            for i in index:
+                s_index = split_index[i]
+                if len(s_index) + len(index_set) <= index_size[i]:
+                    s_index += index_set
+                    scaffold_count[i] += 1
+                    break
+            else:
+                split_index[0] += index_set
+        info(f'Total scaffolds = {len(scaffold_to_indices):,} | ')
+        for i, count in enumerate(scaffold_count):
+            info(f'split {i} scaffolds = {count:,} | ')
+    elif split_type == 'n_heavy':
+        assert n_heavy_cutoff is not None
+        if mols[0].__class__ == 'str':
+            mols = [Chem.MolFromSmiles(s) for s in mols]
+        split_index = [[], []]
+        for i, mol in enumerate(mols):
+            if mol.GetNumAtoms() < n_heavy_cutoff:
+                split_index[0].append(i)
+            else:
+                split_index[1].append(i)
+    elif split_type == 'init_al':
+        class_list = np.unique(targets)
+        assert len(class_list) > 1
+        num_class = len(class_list)
+        if num_class > 10:
+            warn('You are splitting a classification dataset with more than 10 classes.')
+        if n_samples_per_class is None:
+            assert len(sizes) == 2
+            n_samples_per_class = int(sizes[0] * n_samples / num_class)
+            assert n_samples_per_class > 0
 
-    # Map from indices to data
-    train = [dataset[i] for i in train]
-    test = [dataset[i] for i in test]
+        for c in class_list:
+            index = []
+            for i, t in enumerate(targets):
+                if t == c:
+                    index.append(i)
+            split_index[0].extend(np.random.choice(index, n_samples_per_class, replace=False).tolist())
+        for i in range(n_samples):
+            if i not in split_index[0]:
+                split_index[1].append(i)
+    else:
+        raise ValueError(f'split_type "{split_type}" not supported.')
+    assert sum([len(i) for i in split_index]) == n_samples
+    return split_index
 
-    dataset_train, dataset_test = dataset.copy(), dataset.copy()
-    dataset_train.data = train
-    dataset_test.data = test
 
-    return [dataset_train, dataset_test]
-
-
-def dataset_split(dataset, split_type: Literal['random', 'scaffold_balanced', 'n_heavy'] = None,
-                  sizes: Tuple[float, float] = (0.8, 0.2), n_heavy: int = 15,
+def dataset_split(dataset,
+                  split_type: Literal['random', 'scaffold_order', 'scaffold_random', 'init_al', 'stratified',
+                                      'n_heavy'] = None,
+                  sizes: Tuple[float, float] = (0.8, 0.2),
+                  n_heavy_cutoff: int = 15,
                   seed: int = 0) -> List:
     """ Split the data set into two data sets: training set and test set.
 
@@ -134,7 +189,7 @@ def dataset_split(dataset, split_type: Literal['random', 'scaffold_balanced', 'n
     sizes: [float, float].
         If split_type == 'random' or 'scaffold_balanced'.
         sizes are the percentages of molecules in training and test sets.
-    n_heavy: int
+    n_heavy_cutoff: int
         If split_type == 'n_heavy'.
         training set contains molecules with heavy atoms < n_heavy.
         test set contains molecules with heavy atoms >= n_heavy.
@@ -146,31 +201,17 @@ def dataset_split(dataset, split_type: Literal['random', 'scaffold_balanced', 'n
     """
     random = Random(seed)
     data = []
-    if split_type == 'random':
-        assert abs(sum(sizes) - 1) < 1e-10
-        indices = list(range(len(dataset.data)))
-        random.shuffle(indices)
-        end = 0
-        for size in sizes:
-            start = end
-            end = start + int(size * len(dataset.data))
-            dataset_ = dataset.copy()
-            dataset_.data = [dataset.data[i] for i in indices[start:end]]
-            data.append(dataset_)
-        return data
-    elif split_type == 'scaffold_balanced':
-        return scaffold_split(dataset, sizes=sizes, balanced=True, seed=seed)
-    elif split_type == 'n_heavy':
-        train = []
-        test = []
-        for d in dataset.data:
-            if d.data.n_heavy < n_heavy:
-                train.append(d)
-            else:
-                test.append(d)
-        dataset_train, dataset_test = dataset.copy(), dataset.copy()
-        dataset_train.data = train
-        dataset_test.data = test
-        return [dataset_train, dataset_test]
-    else:
-        raise RuntimeError(f'Unsupported split_type {split_type}')
+    split_index = data_split_index(n_samples=len(dataset),
+                                   mols=dataset.mols,
+                                   targets=dataset.y,
+                                   split_type=split_type,
+                                   sizes=sizes,
+                                   n_samples_per_class=None,
+                                   n_heavy_cutoff=n_heavy_cutoff,
+                                   seed=seed,
+                                   logger=None)
+    for s_index in split_index:
+        dataset_ = dataset.copy()
+        dataset_.data = [dataset.data[i] for i in s_index]
+        data.append(dataset_)
+    return data
