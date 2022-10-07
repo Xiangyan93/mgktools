@@ -243,11 +243,13 @@ class CompositeDatapoint:
 
     @property
     def mol(self) -> Chem.Mol:
-        assert len(self.data_p) == 1
         assert len(self.data_m) == 0
         assert len(self.data_cr) == 0
         assert len(self.data_3d) == 0
-        return self.data_p[0].mols[0]
+        if len(self.data_p) == 1:
+            return self.data_p[0].mols[0]
+        else:
+            return None
 
     @property
     def n_heavy(self) -> int:

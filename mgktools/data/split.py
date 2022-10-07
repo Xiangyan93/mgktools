@@ -63,7 +63,6 @@ def get_split_sizes(n_samples: int,
         raise ValueError(f"Split split_ratio do not sum to 1. Received splits: {split_ratio}")
     if any([size < 0 for size in split_ratio]):
         raise ValueError(f"Split split_ratio must be non-negative. Received splits: {split_ratio}")
-    print(split_ratio)
     acc_ratio = np.cumsum([0.] + split_ratio)
     split_sizes = [math.ceil(acc_ratio[i + 1] * n_samples) - math.ceil(acc_ratio[i] * n_samples)
                    for i in range(len(acc_ratio) - 1)]
