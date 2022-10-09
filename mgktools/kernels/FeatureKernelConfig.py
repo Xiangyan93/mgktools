@@ -20,6 +20,8 @@ class FeatureKernelConfig:
         self.n_features = n_features
         self.features_hyperparameters = features_hyperparameters
         self.features_hyperparameters_bounds = features_hyperparameters_bounds
+        if self.__class__ == FeatureKernelConfig:
+            self._update_kernel()
 
     def get_kernel_dict(self, X: np.ndarray, X_labels: List[str]) -> Dict:
         K = self.kernel(X)
