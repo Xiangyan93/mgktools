@@ -533,9 +533,10 @@ class Dataset:
             HashGraph.unify_datatype(X, inplace=True)
 
     def clear_cookie(self):
-        for X in self.X_graph:
-            for g in X:
-                g.cookie.clear()
+        if self.X_graph is not None:
+            for X in self.X_graph:
+                for g in X:
+                    g.cookie.clear()
 
     def save(self, path, filename='dataset.pkl', overwrite=False):
         f_dataset = os.path.join(path, filename)
