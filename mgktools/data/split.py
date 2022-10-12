@@ -178,7 +178,7 @@ def data_split_index(n_samples: int,
 def dataset_split(dataset,
                   split_type: Literal['random', 'scaffold_order', 'scaffold_random', 'init_al', 'stratified',
                                       'n_heavy'] = None,
-                  sizes: Tuple[float, float] = (0.8, 0.2),
+                  sizes: List[float] = [0.8, 0.2],
                   n_heavy_cutoff: int = 15,
                   seed: int = 0) -> List:
     """ Split the data set into two data sets: training set and test set.
