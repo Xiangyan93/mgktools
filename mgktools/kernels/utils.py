@@ -31,7 +31,7 @@ def get_kernel_config(dataset: Dataset,
     if features_kernel_type is None:
         n_features = 0
         assert features_hyperparameters is None
-        assert features_hyperparameters_bounds is None
+        assert features_hyperparameters_bounds in ["fixed", None]
     else:
         n_features = dataset.N_features_mol + dataset.N_features_add
         assert n_features != 0

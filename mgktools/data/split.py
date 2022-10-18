@@ -66,6 +66,8 @@ def get_split_sizes(n_samples: int,
     acc_ratio = np.cumsum([0.] + split_ratio)
     split_sizes = [math.ceil(acc_ratio[i + 1] * n_samples) - math.ceil(acc_ratio[i] * n_samples)
                    for i in range(len(acc_ratio) - 1)]
+    if sum(split_sizes) == n_samples + 1:
+        split_sizes[-1] -= 1
     assert sum(split_sizes) == n_samples
     return split_sizes
 
