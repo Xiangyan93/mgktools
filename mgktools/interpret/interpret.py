@@ -45,6 +45,8 @@ def interpret_training_mols(smiles_to_be_interpret: str,
                             n_mol: int = 10,
                             output_order: Literal['sort_by_value', 'sort_by_percentage_contribution'] = 'sort_by_value',
                             mgk_hyperparameters_file: str = additive_pnorm,
+                            features_generator: List[str] = None,
+                            features_hyperparameters_file: str = None,
                             n_jobs: int = 1):
     """Interpret molecular property prediction by the sum of the contribution of the molecules in the training set.
 
@@ -73,20 +75,25 @@ def interpret_training_mols(smiles_to_be_interpret: str,
     predicted value, predicted uncertainty, interpretation dataframe.
     """
     # graph_to_be_interpret = HashGraph.from_smiles(smiles_to_be_interpret)
+    graph_kernel_type = 'graph' if mgk_hyperparameters_file is not None else None
+
     df = pd.DataFrame({'smiles': smiles_train, 'target': targets_train})
-    train = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs)
-    train.graph_kernel_type = 'graph'
+    train = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs,
+                            features_generator=features_generator)
+    train.graph_kernel_type = graph_kernel_type
     df = pd.DataFrame({'smiles': [smiles_to_be_interpret], 'target': [0.]})
-    test = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs)
-    test.graph_kernel_type = 'graph'
+    test = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs,
+                           features_generator=features_generator)
+    test.graph_kernel_type = graph_kernel_type
     full = train.copy()
     full.data = train.data + test.data
     full.unify_datatype()
     kernel_config = get_kernel_config(
         train,
-        graph_kernel_type='graph',
+        graph_kernel_type=graph_kernel_type,
         # arguments for marginalized graph kernel
         mgk_hyperparameters_files=[mgk_hyperparameters_file],
+        features_hyperparameters_file=features_hyperparameters_file,
     )
     kernel = kernel_config.kernel
     gpr = GPR(kernel=kernel, alpha=alpha, normalize_y=False).fit(train.X, train.y)
