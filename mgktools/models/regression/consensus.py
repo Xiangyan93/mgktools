@@ -7,7 +7,6 @@ import threading
 from joblib import Parallel, delayed
 from ...models.regression.GPRgraphdot import GPR as GPRgraphdot
 from ...models.regression.GPRsklearn.gpr import GPR as GPRsklearn
-from .GPRgraphdot.gpr import predict_
 from sklearn.ensemble._forest import RandomForestRegressor
 
 
@@ -54,7 +53,8 @@ class ConsensusRegressor:
                  n_estimators: int = 100,
                  n_sample_per_model: int = 2000,
                  n_jobs: int = 1, verbose=0,
-                 consensus_rule: Literal['smallest_uncertainty', 'weight_uncertainty', 'mean'] = 'smallest_uncertainty',):
+                 consensus_rule: Literal['smallest_uncertainty', 'weight_uncertainty', 'mean'] = 'smallest_uncertainty'
+                 ):
         self.model = model
         self.models = []
         self.n_estimators = n_estimators
@@ -75,15 +75,14 @@ class ConsensusRegressor:
     def predict(self, X, return_std=False, return_cov=False):
         assert (not return_cov)
         if self.model.__class__ in [GPRgraphdot]:
-            return predict_(self.predict_gpr, X, return_std=return_std,
-                            return_cov=return_cov)
+            return self.predict_gpr(X, return_std=return_std)
         else:
             raise RuntimeError(
                 f'The regressor {self.model} are not supported for '
                 f'ConsensusRegressor yet'
             )
 
-    def predict_gpr(self, X, return_std=False, return_cov=False):
+    def predict_gpr(self, X, return_std=False):
         y_hat = []
         u_hat = []
         # Parallel loop

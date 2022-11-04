@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 from sklearn.gaussian_process._gpr import *
 from sklearn.preprocessing import StandardScaler
-from ..GPRgraphdot.gpr import predict_
 import pickle
 import os
 
@@ -87,8 +86,7 @@ class GPR(GaussianProcessRegressor):
                 return y_mean
 
     def predict(self, X, return_std=False, return_cov=False):
-        return predict_(self.predict_, X, return_std=return_std,
-                        return_cov=return_cov)
+        return self.predict_(X, return_std=return_std, return_cov=return_cov)
 
     def predict_loocv(self, X, y, return_std=False):  # return loocv prediction
         if not hasattr(self, 'kernel_'):

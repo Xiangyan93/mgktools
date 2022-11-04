@@ -204,7 +204,7 @@ def dataset_split(dataset,
     random = Random(seed)
     data = []
     split_index = data_split_index(n_samples=len(dataset),
-                                   mols=dataset.mols,
+                                   mols=None if split_type in ['random', 'stratified'] else dataset.mols,
                                    targets=dataset.y,
                                    split_type=split_type,
                                    sizes=sizes,
