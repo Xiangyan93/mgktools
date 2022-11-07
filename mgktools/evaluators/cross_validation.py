@@ -22,7 +22,7 @@ class Evaluator:
                  task_type: Literal['regression', 'binary', 'multi-class'],
                  metrics: List[Metric],
                  split_type: Literal['random', 'scaffold_balanced', 'loocv'],
-                 split_sizes: Tuple[float, float] = None,
+                 split_sizes: List[float] = None,
                  num_folds: int = 1,
                  return_std: bool = False,
                  return_proba: bool = False,
@@ -97,13 +97,13 @@ class Evaluator:
             train_metrics_results[metric] = []
             test_metrics_results[metric] = []
 
-        if self.split_type is None:
-            assert external_test_dataset is not None
+        if external_test_dataset is not None:
+            assert self.split_type is None
             dataset_train = self.dataset
             dataset_test = external_test_dataset
             train_metrics, test_metrics = self.evaluate_train_test(dataset_train, dataset_test,
-                                                                   train_log='train.log',
-                                                                   test_log='test.log')
+                                                                   train_log='train.csv',
+                                                                   test_log='test.csv')
             for j, metric in enumerate(self.metrics):
                 if train_metrics is not None:
                     train_metrics_results[metric].append(train_metrics[j])
@@ -118,8 +118,8 @@ class Evaluator:
                     sizes=self.split_sizes,
                     seed=self.seed + i)
                 train_metrics, test_metrics = self.evaluate_train_test(dataset_train, dataset_test,
-                                                                       train_log='train_%d.log' % i,
-                                                                       test_log='test_%d.log' % i)
+                                                                       train_log='train_%d.csv' % i,
+                                                                       test_log='test_%d.csv' % i)
                 for j, metric in enumerate(self.metrics):
                     if train_metrics is not None:
                         train_metrics_results[metric].append(train_metrics[j])
@@ -137,8 +137,8 @@ class Evaluator:
 
     def evaluate_train_test(self, dataset_train: Dataset,
                             dataset_test: Dataset,
-                            train_log: str = 'train.log',
-                            test_log: str = 'test.log') -> Tuple[Optional[List[float]], Optional[List[float]]]:
+                            train_log: str = 'train.csv',
+                            test_log: str = 'test.csv') -> Tuple[Optional[List[float]], Optional[List[float]]]:
         X_train = dataset_train.X
         y_train = dataset_train.y
         repr_train = dataset_train.repr.ravel()
@@ -152,27 +152,14 @@ class Evaluator:
             y_similar = self.get_similar_info(X_test, X_train, repr_train, self.n_similar)
 
         train_metrics = None
-        if self.n_core is not None:
-            idx = np.random.choice(np.arange(len(X_train)), self.n_core, replace=False)
-            C_train = X_train[idx]
-            self.model.fit(C_train, X_train, y_train)
-        # elif self.args.dataset_type == 'regression' and self.args.model_type == 'gpr' and not self.args.ensemble:
-        #    self.model.fit(X_train, y_train, loss=self.args.loss, verbose=True)
-        else:
-            self.model.fit(X_train, y_train)
+        self.fit(X_train, y_train)
 
-        return_std = self.return_std
-        proba = self.return_proba
         # save results test_*.log
         test_metrics = self._eval(X_test, y_test, repr_test, y_similar,
-                                  logfile=None if test_log is None else '%s/%s' % (self.save_dir, test_log),
-                                  return_std=return_std,
-                                  return_proba=proba)
+                                  logfile=None if test_log is None else '%s/%s' % (self.save_dir, test_log))
         if self.evaluate_train:
             train_metrics = self._eval(X_train, y_train, repr_train, repr_train,
-                                       logfile=None if train_log is None else '%s/%s' % (self.save_dir, train_log),
-                                       return_std=return_std,
-                                       return_proba=proba)
+                                       logfile=None if train_log is None else '%s/%s' % (self.save_dir, train_log))
 
         return train_metrics, test_metrics
 
@@ -188,16 +175,54 @@ class Evaluator:
             self.model.fit(X, y, loss='loocv', verbose=True)
         """
         loocv_metrics = self._eval(X, y, repr, y_similar,
-                                   logfile='%s/%s' % (self.save_dir, 'loocv.log'),
-                                   return_std=False, loocv=True,
-                                   return_proba=False)
+                                   logfile='%s/%s' % (self.save_dir, 'loocv.csv'))
         self._log('LOOCV:')
         for i, metric in enumerate(self.metrics):
             self._log('%s: %.5f' % (metric, loocv_metrics[i]))
         return loocv_metrics[0]
 
-    def train(self):
-        self.model.fit(self.dataset.X, self.dataset.y)
+    def fit(self, X, y):
+        if self.n_core is not None:
+            idx = np.random.choice(np.arange(len(X)), self.n_core, replace=False)
+            C_train = X[idx]
+            self.model.fit(C_train, X, y)
+        # elif self.args.dataset_type == 'regression' and self.args.model_type == 'gpr' and not self.args.ensemble:
+        #    self.model.fit(X_train, y_train, loss=self.args.loss, verbose=True)
+        else:
+            self.model.fit(X, y)
+
+    def predict(self, X, y: np.ndarray, repr: List[str], y_similar: List[str] = None):
+        if self.split_type == 'loocv':
+            y_pred, y_std = self.model.predict_loocv(X, y, return_std=True)
+        elif self.return_std:
+            y_pred, y_std = self.model.predict(X, return_std=True)
+        elif self.return_proba:
+            y_pred = self.model.predict_proba(X)
+            y_std = None
+        else:
+            y_pred = self.model.predict(X)
+            y_std = None
+        if y.ndim == 2:
+            assert y_pred.ndim == 2
+            assert y_std is None or y_std.ndim == 2
+            pred_dict = {}
+            for i in range(y.shape[1]):
+                pred_dict['target_%d' % i] = y[:, i]
+                pred_dict['predict_%d' % i] = y_pred[:, i]
+                if y_std is not None:
+                    pred_dict['uncertainty_%d' % i] = y_std[:, i]
+            pred_dict['repr'] = repr
+            pred_dict['y_similar'] = y_similar
+        else:
+            pred_dict = {
+                'target': y,
+                'predict': y_pred,
+                'repr': repr,
+                'y_similar': y_similar
+            }
+            if y_std is not None:
+                pred_dict['uncertainty'] = y_std
+        return self.df_output(**pred_dict)
 
     def get_similar_info(self, X, X_train, X_repr, n_most_similar) -> List[str]:
         K = self.kernel(X, X_train)
@@ -219,7 +244,7 @@ class Evaluator:
         return np.argsort(-K)[:, :min(n, K.shape[1])]
 
     @staticmethod
-    def _output_df(**kwargs):
+    def df_output(**kwargs):
         df = kwargs.copy()
         for key, value in kwargs.items():
             if value is None:
@@ -230,30 +255,17 @@ class Evaluator:
               y: np.ndarray,  # 1-d or 2-d array
               repr: List[str],
               y_similar: List[str],
-              logfile: str,
-              return_std: bool = False,
-              return_proba: bool = False,
-              loocv: bool = False):
-        if loocv:
-            y_pred, y_std = self.model.predict_loocv(X, y, return_std=True)
-        elif return_std:
-            y_pred, y_std = self.model.predict(X, return_std=True)
-        elif return_proba:
-            y_pred = self.model.predict_proba(X)
-            y_std = None
-        else:
-            y_pred = self.model.predict(X)
-            y_std = None
+              logfile: str):
+        df_output = self.predict(X, y, repr, y_similar=y_similar)
         if logfile is not None and self.write_file:
-            self._output_df(target=y,
-                            predict=y_pred,
-                            uncertainty=y_std,
-                            repr=repr,
-                            y_similar=y_similar). \
-                to_csv(logfile, sep='\t', index=False, float_format='%15.10f')
+            df_output.to_csv(logfile, sep='\t', index=False, float_format='%15.10f')
         if y is None:
             return None
         else:
+            if y.ndim == 2:
+                y_pred = df_output[['predict_%d' % i for i in range(y.shape[1])]].to_numpy()
+            else:
+                y_pred = df_output['predict']
             return [self._eval_metric(y, y_pred, metric, self.task_type) for metric in self.metrics]
 
     def _eval_metric(self,

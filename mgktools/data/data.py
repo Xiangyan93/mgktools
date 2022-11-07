@@ -447,7 +447,7 @@ class Dataset:
     @property
     def X_features_add(self) -> np.ndarray:
         features_add = self.X_raw_features_add
-        if self.features_add_scaler is not None:
+        if self.features_add_scaler is not None and features_add is not None:
             features_add = self.features_add_scaler.transform(features_add)
         return features_add
 

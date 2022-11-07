@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from typing import Callable, List, Union
+import math
 import numpy as np
 from rdkit import Chem, DataStructs
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, Descriptors
 from descriptastorus.descriptors import rdDescriptors, rdNormalizedDescriptors
 
 
@@ -25,6 +26,8 @@ class FeaturesGenerator:
             return self.morgan_binary_features_generator(mol)
         elif self.features_generator_name == 'morgan_count':
             return self.morgan_counts_features_generator(mol)
+        elif self.features_generator_name == 'rdkit_208':
+            return self.rdkit_208_features_generator(mol)
         elif self.features_generator_name == 'rdkit_2d':
             return self.rdkit_2d_features_generator(mol)
         elif self.features_generator_name == 'rdkit_2d_normalized':
@@ -91,3 +94,19 @@ class FeaturesGenerator:
         features = generator.process(smiles)[1:]
 
         return features
+
+    @staticmethod
+    def rdkit_208_features_generator(mol: Union[str, Chem.Mol]) -> np.ndarray:
+        # define chemical features for molecular descriptions
+        descr = Descriptors._descList
+        calc = [x[1] for x in descr]
+        ds_n = []
+        for d in calc:
+            v = d(mol)
+            if v > np.finfo(np.float32).max:  # postprocess descriptors for freak large values
+                ds_n.append(np.finfo(np.float32).max)
+            elif math.isnan(v):
+                ds_n.append(np.float32(0.0))
+            else:
+                ds_n.append(np.float32(v))
+        return np.array(ds_n)
