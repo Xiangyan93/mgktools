@@ -202,7 +202,12 @@ class Evaluator:
         else:
             y_pred = self.model.predict(X)
             y_std = None
-        if y.ndim == 2:
+        if y is None:
+            pred_dict = {
+                'predict': y_pred,
+                'repr': repr,
+            }
+        elif y.ndim == 2:
             assert y_pred.ndim == 2
             assert y_std is None or y_std.ndim == 2
             pred_dict = {}
@@ -212,16 +217,16 @@ class Evaluator:
                 if y_std is not None:
                     pred_dict['uncertainty_%d' % i] = y_std[:, i]
             pred_dict['repr'] = repr
-            pred_dict['y_similar'] = y_similar
         else:
             pred_dict = {
                 'target': y,
                 'predict': y_pred,
                 'repr': repr,
-                'y_similar': y_similar
             }
             if y_std is not None:
                 pred_dict['uncertainty'] = y_std
+        if y_similar is not None:
+            pred_dict['y_similar'] = y_similar
         return self.df_output(**pred_dict)
 
     def get_similar_info(self, X, X_train, X_repr, n_most_similar) -> List[str]:

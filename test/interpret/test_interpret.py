@@ -18,7 +18,7 @@ df = pd.DataFrame({'pure': pure, 'targets_1': targets})
 def test_interpret_training_mols(testset):
     mgk_hyperparameters_file = testset
     y_pred, y_std, df_interpret = interpret_training_mols(
-        smiles_to_be_interpret='Cc1cc(cc(c1)O)C',
+        smiles_to_be_interpret=['Cc1cc(cc(c1)O)C', 'CCC'],
         smiles_train=pure,
         targets_train=targets,
         alpha=0.01,
@@ -26,7 +26,8 @@ def test_interpret_training_mols(testset):
         output_order='sort_by_value',
         mgk_hyperparameters_file=mgk_hyperparameters_file,
         n_jobs=6)
-    assert df_interpret['contribution_value'].sum() == pytest.approx(y_pred, 1e-5)
+    for i, df in enumerate(df_interpret):
+        assert df['contribution_value'].sum() == pytest.approx(y_pred[i], 1e-5)
 
 
 @pytest.mark.parametrize('testset', [

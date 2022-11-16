@@ -38,7 +38,7 @@ def get_node_graphs(mol: Chem.Mol) -> List[HashGraph]:
     return graphs
 
 
-def interpret_training_mols(smiles_to_be_interpret: str,
+def interpret_training_mols(smiles_to_be_interpret: List[str],
                             smiles_train: List[str],
                             targets_train: List[float],
                             alpha: float = 0.01,
@@ -47,7 +47,8 @@ def interpret_training_mols(smiles_to_be_interpret: str,
                             mgk_hyperparameters_file: str = additive_pnorm,
                             features_generator: List[str] = None,
                             features_hyperparameters_file: str = None,
-                            n_jobs: int = 1):
+                            n_jobs: int = 1,
+                            return_kernel: bool = False):
     """Interpret molecular property prediction by the sum of the contribution of the molecules in the training set.
 
     Parameters
@@ -81,7 +82,7 @@ def interpret_training_mols(smiles_to_be_interpret: str,
     train = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs,
                             features_generator=features_generator)
     train.graph_kernel_type = graph_kernel_type
-    df = pd.DataFrame({'smiles': [smiles_to_be_interpret], 'target': [0.]})
+    df = pd.DataFrame({'smiles': smiles_to_be_interpret, 'target': [0.] * len(smiles_to_be_interpret)})
     test = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs,
                            features_generator=features_generator)
     test.graph_kernel_type = graph_kernel_type
@@ -103,10 +104,13 @@ def interpret_training_mols(smiles_to_be_interpret: str,
         idx = np.argsort(-np.fabs(c_y))[:, :min(n_mol, c_y.shape[1])]
     else:
         idx = np.argsort(-np.fabs(c_percentage))[:, :min(n_mol, c_percentage.shape[1])]
-    df_out = pd.DataFrame({'smiles_train': np.asarray(smiles_train)[idx[0]],
-                           'contribution_percentage': c_percentage[0][idx[0]],
-                           'contribution_value': c_y[0][idx[0]]})
-    return y_pred[0], y_std[0], df_out
+    df_out = [pd.DataFrame({'smiles_train': np.asarray(smiles_train)[idx[i]],
+                           'contribution_percentage': c_percentage[i][idx[i]],
+                           'contribution_value': c_y[i][idx[i]]}) for i in range(len(idx))]
+    if return_kernel:
+        for i, df in enumerate(df_out):
+            df['kernel'] = kernel(train.X, test.X[i].reshape(1, -1)).ravel()[idx[i]]
+    return y_pred, y_std, df_out
 
 
 def interpret_atoms(smiles_to_be_interpret: str,
