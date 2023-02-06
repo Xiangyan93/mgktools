@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import os
 from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
+import math
+from tqdm import tqdm
 import pandas as pd
 import numpy as np
 from sklearn.metrics import (
@@ -10,6 +12,7 @@ from sklearn.metrics import (
     recall_score,
     f1_score
 )
+from ..interpret.interpret import save_mols_pkl
 from ..data import Dataset, dataset_split
 from .metric import Metric, eval_metric_func
 
@@ -30,6 +33,7 @@ class Evaluator:
                  n_similar: Optional[int] = None,
                  kernel=None,
                  n_core: int = None,
+                 atomic_attribution: bool = False,
                  seed: int = 0,
                  verbose: bool = True
                  ):
@@ -76,6 +80,7 @@ class Evaluator:
         self.n_similar = n_similar
         self.kernel = kernel
         self.n_core = n_core
+        self.atomic_attribution = atomic_attribution
         self.seed = seed
         self.verbose = verbose
 
@@ -102,8 +107,7 @@ class Evaluator:
             dataset_train = self.dataset
             dataset_test = external_test_dataset
             train_metrics, test_metrics = self.evaluate_train_test(dataset_train, dataset_test,
-                                                                   train_log='train.csv',
-                                                                   test_log='test.csv')
+                                                                   output_tag='ext')
             for j, metric in enumerate(self.metrics):
                 if train_metrics is not None:
                     train_metrics_results[metric].append(train_metrics[j])
@@ -117,9 +121,9 @@ class Evaluator:
                     split_type=self.split_type,
                     sizes=self.split_sizes,
                     seed=self.seed + i)
-                train_metrics, test_metrics = self.evaluate_train_test(dataset_train, dataset_test,
-                                                                       train_log='train_%d.csv' % i,
-                                                                       test_log='test_%d.csv' % i)
+                train_metrics, test_metrics = self.evaluate_train_test(
+                    dataset_train, dataset_test,
+                    output_tag='%d' % i)
                 for j, metric in enumerate(self.metrics):
                     if train_metrics is not None:
                         train_metrics_results[metric].append(train_metrics[j])
@@ -137,8 +141,12 @@ class Evaluator:
 
     def evaluate_train_test(self, dataset_train: Dataset,
                             dataset_test: Dataset,
-                            train_log: str = 'train.csv',
-                            test_log: str = 'test.csv') -> Tuple[Optional[List[float]], Optional[List[float]]]:
+                            output_tag: str = '0') -> Tuple[Optional[List[float]],
+                                                            Optional[
+                                                            List[float]]]:
+        train_log = 'train_%s.csv' % output_tag
+        test_log = 'test_%s.csv' % output_tag
+
         X_train = dataset_train.X
         y_train = dataset_train.y
         repr_train = dataset_train.repr.ravel()
@@ -157,6 +165,10 @@ class Evaluator:
         # save results test_*.log
         test_metrics = self._eval(X_test, y_test, repr_test, y_similar,
                                   logfile=None if test_log is None else '%s/%s' % (self.save_dir, test_log))
+
+        if self.atomic_attribution:
+            self.interpret(dataset_test, output_tag=output_tag)
+
         if self.evaluate_train:
             train_metrics = self._eval(X_train, y_train, repr_train, repr_train,
                                        logfile=None if train_log is None else '%s/%s' % (self.save_dir, train_log))
@@ -228,6 +240,27 @@ class Evaluator:
         if y_similar is not None:
             pred_dict['y_similar'] = y_similar
         return self.df_output(**pred_dict)
+
+    def interpret(self, dataset_test, output_tag: str):
+        X_test = dataset_test.X
+        mols_to_be_interpret = dataset_test.mols
+        batch_size = 10
+        N_batch = math.ceil(len(mols_to_be_interpret) / batch_size)
+        for i in tqdm(range(N_batch)):
+            start = batch_size * i
+            end = batch_size * (i + 1)
+            if end > len(mols_to_be_interpret):
+                end = len(mols_to_be_interpret)
+            g = X_test[start:end, :]
+            y_nodes = self.model.predict_nodal(g)
+            k = 0
+            for j in range(start, end):
+                mol = mols_to_be_interpret[j]
+                for atom in mol.GetAtoms():
+                    atom.SetProp('atomNote', '%.6f' % y_nodes[k])
+                    k += 1
+            assert k == len(y_nodes)
+        save_mols_pkl(mols=mols_to_be_interpret, path=self.save_dir, filename='imgk_%s.pkl' % output_tag)
 
     def get_similar_info(self, X, X_train, X_repr, n_most_similar) -> List[str]:
         K = self.kernel(X, X_train)
