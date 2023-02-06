@@ -244,7 +244,7 @@ class Evaluator:
     def interpret(self, dataset_test, output_tag: str):
         X_test = dataset_test.X
         mols_to_be_interpret = dataset_test.mols
-        batch_size = 10
+        batch_size = 100
         N_batch = math.ceil(len(mols_to_be_interpret) / batch_size)
         for i in tqdm(range(N_batch)):
             start = batch_size * i
@@ -255,12 +255,14 @@ class Evaluator:
             y_nodes = self.model.predict_nodal(g)
             k = 0
             for j in range(start, end):
-                mol = mols_to_be_interpret[j]
+                m = mols_to_be_interpret[j]
+                assert len(m) == 1, 'interpretability is only valid for single-graph data'
+                mol = m[0]
                 for atom in mol.GetAtoms():
                     atom.SetProp('atomNote', '%.6f' % y_nodes[k])
                     k += 1
             assert k == len(y_nodes)
-        save_mols_pkl(mols=mols_to_be_interpret, path=self.save_dir, filename='imgk_%s.pkl' % output_tag)
+        save_mols_pkl(mols=[m[0]for m in mols_to_be_interpret], path=self.save_dir, filename='imgk_%s.pkl' % output_tag)
 
     def get_similar_info(self, X, X_train, X_repr, n_most_similar) -> List[str]:
         K = self.kernel(X, X_train)

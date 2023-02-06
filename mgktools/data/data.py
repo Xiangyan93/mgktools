@@ -161,8 +161,11 @@ class MultiMolecularGraph2D:
                                  self.data, self.concentration)))
 
     @property
-    def mols(self) -> List[Chem.Mol]:
-        return [d.mol for d in self.data]
+    def mol(self) -> List[Chem.Mol]:
+        mol = self.data[0].mol
+        for d in self.data[1:]:
+            mol = Chem.CombineMols(mol, d.mol)
+        return mol
 
     @property
     def X_single_graph(self) -> Optional[np.ndarray]:  # 2d array.
@@ -242,14 +245,15 @@ class CompositeDatapoint:
         return ';'.join(list(map(lambda x: x.__repr__(), self.data)))
 
     @property
-    def mol(self) -> Chem.Mol:
-        assert len(self.data_m) == 0
+    def mols(self) -> List[Chem.Mol]:
+        mols = []
+        for data in self.data_p:
+            mols.append(data.mol)
+        for data in self.data_m:
+            mols.append(data.mol)
         assert len(self.data_cr) == 0
         assert len(self.data_3d) == 0
-        if len(self.data_p) == 1:
-            return self.data_p[0].mols[0]
-        else:
-            return None
+        return mols
 
     @property
     def n_heavy(self) -> int:
@@ -316,7 +320,7 @@ class SubDataset:
 
     @property
     def mol(self) -> Chem.Mol:
-        return self.data.mol
+        return self.data.mols
 
     @property
     def repr(self) -> np.ndarray:  # 2d array str.
