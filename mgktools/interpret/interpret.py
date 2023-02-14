@@ -7,8 +7,6 @@ import pandas as pd
 import json
 import rdkit.Chem.AllChem as Chem
 import math
-import pickle
-import os
 from ..hyperparameters import additive_pnorm
 from ..graph.hashgraph import HashGraph
 from ..data import Dataset
@@ -243,25 +241,3 @@ def get_interpreted_mols(smiles_train: List[str],
         HashGraph.unify_datatype(graphs + graphs_to_be_interpret, inplace=True)
         y_pred, y_std = gpr.predict(graphs_to_be_interpret, return_std=True)
         return y_pred, y_std, mols_to_be_interpret
-
-
-def save_mols_pkl(mols: List[Chem.Mol], path, filename='mols.pkl'):
-    f_mols = os.path.join(path, filename)
-    atomic_attribution = []
-    for mol in mols:
-        atomNote = []
-        for atom in mol.GetAtoms():
-            atomNote.append(atom.GetProp('atomNote'))
-        atomic_attribution.append(atomNote)
-    with open(f_mols, "wb") as f:
-        pickle.dump([mols, atomic_attribution], f)
-
-
-def load_mols_pkl(path, filename='mols.pkl'):
-    f_mols = os.path.join(path, filename)
-    with open(f_mols, "rb") as f:
-        mols, atomic_attribution = pickle.load(f)
-    for i, mol in enumerate(mols):
-        for j, atom in enumerate(mol.GetAtoms()):
-            atom.SetProp('atomNote', atomic_attribution[i][j])
-    return mols

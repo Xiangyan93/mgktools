@@ -12,7 +12,7 @@ from sklearn.metrics import (
     recall_score,
     f1_score
 )
-from ..interpret.interpret import save_mols_pkl
+from ..interpret.utils import save_mols_pkl
 from ..data import Dataset, dataset_split
 from .metric import Metric, eval_metric_func
 
