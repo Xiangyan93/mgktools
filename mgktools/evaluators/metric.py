@@ -17,23 +17,29 @@ Metric = Literal['roc-auc', 'accuracy', 'precision', 'recall', 'f1_score', 'mcc'
                  'rmse', 'mae', 'mse', 'r2', 'max']
 
 
+def p2v(y: List[float], y_pred: List[float]):
+    avail_values = list(set(y))
+    y_pred = [min(avail_values, key=lambda x: abs(x - v)) for v in y_pred]
+    return y_pred
+
+
 def eval_metric_func(y: List[float], y_pred: List[float], metric: Metric) -> float:
     if metric == 'roc-auc':
         return roc_auc_score(y, y_pred)
     elif metric == 'accuracy':
-        y_pred = [1 if i >= 0.5 else 0 for i in y_pred]
+        y_pred = p2v(y, y_pred)
         return accuracy_score(y, y_pred)
     elif metric == 'precision':
-        y_pred = [1 if i >= 0.5 else 0 for i in y_pred]
+        y_pred = p2v(y, y_pred)
         return precision_score(y, y_pred)
     elif metric == 'recall':
-        y_pred = [1 if i >= 0.5 else 0 for i in y_pred]
+        y_pred = p2v(y, y_pred)
         return recall_score(y, y_pred)
     elif metric == 'f1_score':
-        y_pred = [1 if i >= 0.5 else 0 for i in y_pred]
+        y_pred = p2v(y, y_pred)
         return f1_score(y, y_pred)
     elif metric == 'mcc':
-        y_pred = [1 if i >= 0.5 else 0 for i in y_pred]
+        y_pred = p2v(y, y_pred)
         return matthews_corrcoef(y, y_pred)
     elif metric == 'r2':
         return r2_score(y, y_pred)
