@@ -4,7 +4,84 @@ import os
 import json
 import pickle
 from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
+from sklearn.gaussian_process.kernels import RBF, DotProduct
 from ..data import Dataset
+
+
+def get_kernel(graph_kernel_type: Literal['graph', 'pre-computed'] = None,
+               mgk_files: List[str] = None,
+               features_kernel_type: Literal['linear', 'dot_product', 'rbf'] = None,
+               features_hyperparameters: Union[float, List[float]] = None,
+               features_hyperparameters_file: str = None,
+               dataset: Dataset = None,
+               kernel_pkl_path: str = None,
+               ):
+    if mgk_files is None:
+        assert graph_kernel_type is None
+        # no graph kernel involved.
+        if features_kernel_type is None:
+            return None
+        elif features_kernel_type == 'linear':
+            return 'linear'
+        elif features_kernel_type == 'dot_product':
+            if features_hyperparameters.__class__ == list:
+                assert len(features_hyperparameters) == 1
+                sigma_0 = features_hyperparameters[0]
+            else:
+                sigma_0 = features_hyperparameters
+            return DotProduct(sigma_0=sigma_0)
+        elif features_kernel_type == 'rbf':
+            return RBF(length_scale=features_hyperparameters)
+        else:
+            raise ValueError
+    else:
+        if graph_kernel_type == 'graph':
+            return get_kernel_config(
+                dataset=dataset,
+                graph_kernel_type='graph',
+                mgk_hyperparameters_files=mgk_files,
+                features_kernel_type=features_kernel_type,
+                features_hyperparameters=features_hyperparameters,
+                features_hyperparameters_bounds="fixed",
+                features_hyperparameters_file=features_hyperparameters_file
+            ).kernel
+        elif graph_kernel_type == 'pre-computed':
+            assert kernel_pkl_path is not None
+            if os.path.exists(kernel_pkl_path):
+                return get_kernel_config(
+                    dataset=dataset,
+                    graph_kernel_type='pre-computed',
+                    features_kernel_type=features_kernel_type,
+                    features_hyperparameters=features_hyperparameters,
+                    features_hyperparameters_bounds="fixed",
+                    features_hyperparameters_file=features_hyperparameters_file,
+                    kernel_pkl=kernel_pkl_path
+                ).kernel
+            else:
+                dataset.graph_kernel_type = 'graph'
+                kernel_config = get_kernel_config(
+                    dataset=dataset,
+                    graph_kernel_type='graph',
+                    mgk_hyperparameters_files=mgk_files,
+                    features_kernel_type=features_kernel_type,
+                    features_hyperparameters=features_hyperparameters,
+                    features_hyperparameters_bounds="fixed",
+                    features_hyperparameters_file=features_hyperparameters_file
+                )
+                kernel_dict = kernel_config.get_kernel_dict(dataset.X, dataset.X_repr.ravel())
+                dataset.graph_kernel_type = 'pre-computed'
+                pickle.dump(kernel_dict, open(kernel_pkl_path, 'wb'), protocol=4)
+                return get_kernel_config(
+                    dataset=dataset,
+                    graph_kernel_type='pre-computed',
+                    features_kernel_type=features_kernel_type,
+                    features_hyperparameters=features_hyperparameters,
+                    features_hyperparameters_bounds="fixed",
+                    features_hyperparameters_file=features_hyperparameters_file,
+                    kernel_dict=kernel_dict
+                ).kernel
+        else:
+            raise ValueError
 
 
 def get_kernel_config(dataset: Dataset,
