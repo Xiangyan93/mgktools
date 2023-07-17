@@ -126,7 +126,7 @@ def data_split_index(n_samples: int,
                             reverse=True)
 
         scaffold_count = [0 for size in sizes]
-        index = [0, 1]
+        index = list(range(len(sizes)))
         for index_set in index_sets:
             if split_type == 'scaffold_random':
                 random.shuffle(index)
