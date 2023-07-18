@@ -75,6 +75,7 @@ def interpret_training_mols(smiles_to_be_interpret: List[str],
     -------
     predicted value, predicted uncertainty, interpretation dataframe.
     """
+    assert not isinstance(smiles_to_be_interpret, str)
     # graph_to_be_interpret = HashGraph.from_smiles(smiles_to_be_interpret)
     graph_kernel_type = 'graph' if mgk_hyperparameters_file is not None else None
 
