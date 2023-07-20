@@ -44,7 +44,7 @@ class FeaturesGenerator:
         :param num_bits: Number of bits in Morgan fingerprint.
         :return: A 1D numpy array containing the binary Morgan fingerprint.
         """
-        mol = Chem.MolFromSmiles(mol) if type(mol) == str else mol
+        mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
         features_vec = AllChem.GetMorganFingerprintAsBitVect(mol, self.radius, nBits=self.num_bits)
         features = np.zeros((1,))
         DataStructs.ConvertToNumpyArray(features_vec, features)
@@ -60,7 +60,7 @@ class FeaturesGenerator:
         :param num_bits: Number of bits in Morgan fingerprint.
         :return: A 1D numpy array containing the counts-based Morgan fingerprint.
         """
-        mol = Chem.MolFromSmiles(mol) if type(mol) == str else mol
+        mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
         features_vec = AllChem.GetHashedMorganFingerprint(mol, self.radius, nBits=self.num_bits)
         features = np.zeros((1,))
         DataStructs.ConvertToNumpyArray(features_vec, features)
@@ -75,11 +75,11 @@ class FeaturesGenerator:
         :param mol: A molecule (i.e., either a SMILES or an RDKit molecule).
         :return: A 1D numpy array containing the RDKit 2D features_mol.
         """
-        smiles = Chem.MolToSmiles(mol, isomericSmiles=True) if type(mol) != str else mol
+        smiles = Chem.MolToSmiles(mol, isomericSmiles=True) if isinstance(mol, Chem.Mol) else mol
         generator = rdDescriptors.RDKit2D()
         features = generator.process(smiles)[1:]
 
-        return features
+        return np.array(features)
 
     @staticmethod
     def rdkit_2d_normalized_features_generator(mol: Union[str, Chem.Mol]) -> np.ndarray:
@@ -89,15 +89,16 @@ class FeaturesGenerator:
         :param mol: A molecule (i.e., either a SMILES or an RDKit molecule).
         :return: A 1D numpy array containing the RDKit 2D normalized features_mol.
         """
-        smiles = Chem.MolToSmiles(mol, isomericSmiles=True) if type(mol) != str else mol
+        smiles = Chem.MolToSmiles(mol, isomericSmiles=True) if isinstance(mol, Chem.Mol) else mol
         generator = rdNormalizedDescriptors.RDKit2DNormalized()
         features = generator.process(smiles)[1:]
 
-        return features
+        return np.array(features)
 
     @staticmethod
     def rdkit_208_features_generator(mol: Union[str, Chem.Mol]) -> np.ndarray:
         # define chemical features for molecular descriptions
+        mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
         descr = Descriptors._descList
         calc = [x[1] for x in descr]
         ds_n = []

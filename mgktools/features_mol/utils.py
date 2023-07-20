@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from typing import Callable, List, Union
 import csv
 import os
 import pickle
 from typing import List
-
 import numpy as np
+from joblib import Parallel, delayed
+from rdkit import Chem
+from .features_generators import FeaturesGenerator
 
 
 def save_features(path: str, features: List[np.ndarray]) -> None:
@@ -55,3 +58,13 @@ def load_features(path: str) -> np.ndarray:
         raise ValueError(f'Features path extension {extension} not supported.')
 
     return features
+
+
+def get_features(smiles: Union[str, Chem.Mol], features_generators: List[FeaturesGenerator]):
+    return np.concatenate([fg(smiles) for fg in features_generators]).tolist()
+
+
+def get_features_parallel(smiles: List[Union[str, Chem.Mol]], features_generators: List[FeaturesGenerator], n_jobs: int = 8):
+    data = Parallel(n_jobs=n_jobs, verbose=True, prefer='processes')(
+        delayed(get_features)(mol, features_generators)for i, mol in enumerate(smiles))
+    return np.array(data)
