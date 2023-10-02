@@ -116,11 +116,21 @@ class Evaluator:
         else:
             for i in range(self.num_folds):
                 # data splits
-                dataset_train, dataset_test = dataset_split(
-                    self.dataset,
-                    split_type=self.split_type,
-                    sizes=self.split_sizes,
-                    seed=self.seed + i)
+                if len(self.split_sizes) == 2:
+                    dataset_train, dataset_test = dataset_split(
+                        self.dataset,
+                        split_type=self.split_type,
+                        sizes=self.split_sizes,
+                        seed=self.seed + i)
+                # the second part, validation set, is abandoned.
+                elif len(self.split_sizes) == 3:
+                    dataset_train, _, dataset_test = dataset_split(
+                        self.dataset,
+                        split_type=self.split_type,
+                        sizes=self.split_sizes,
+                        seed=self.seed + i)
+                else:
+                    raise ValueError('split_sizes must be 2 or 3.')
                 train_metrics, test_metrics = self.evaluate_train_test(
                     dataset_train, dataset_test,
                     output_tag='%d' % i)
