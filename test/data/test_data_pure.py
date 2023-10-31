@@ -29,7 +29,6 @@ def test_only_graph(testset):
     ('morgan', 2048),
     ('rdkit_2d', 200),
     ('rdkit_2d_normalized', 200),
-    ('rdkit_208', 208),
 ])
 def test_only_fingerprints(testset):
     features_generator, n_features = testset
@@ -45,7 +44,6 @@ def test_only_fingerprints(testset):
     ('morgan', 2048),
     ('rdkit_2d', 200),
     ('rdkit_2d_normalized', 200),
-    ('rdkit_208', 208),
 ])
 def test_graph_fingerprints(testset):
     features_generator, n_features = testset

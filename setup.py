@@ -31,6 +31,7 @@ setuptools.setup(
         'mendeleev>=0.7',
         'rxntools>=0.0.2',
         'pycuda>=2022.1',
+        'rdkit>=2022.9.2',
     ],
     author='Yan Xiang',
     author_email='1993.xiangyan@gmail.com',
