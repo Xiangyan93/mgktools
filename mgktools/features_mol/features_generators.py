@@ -12,12 +12,17 @@ from descriptastorus.descriptors import rdDescriptors, rdNormalizedDescriptors
 class FeaturesGenerator:
     def __init__(self, features_generator_name: Union[str, Callable],
                  radius: int = 2,
-                 num_bits: int = 2048):
+                 num_bits: int = 2048,
+                 atomInvariantsGenerator: bool = False):
         self.features_generator_name = features_generator_name
         self.radius = radius
         self.num_bits = num_bits
         if features_generator_name in ['morgan', 'morgan_count']:
-            self.generator = AllChem.GetMorganGenerator(radius=radius, fpSize=num_bits)
+            if atomInvariantsGenerator:
+                invgen = AllChem.GetMorganFeatureAtomInvGen()
+                self.generator = AllChem.GetMorganGenerator(radius=radius, fpSize=num_bits, atomInvariantsGenerator=invgen)
+            else:
+                self.generator = AllChem.GetMorganGenerator(radius=radius, fpSize=num_bits)
         elif features_generator_name == 'circular':
             import deepchem
             self.generator = deepchem.feat.CircularFingerprint(radius=radius, size=num_bits, 
@@ -48,6 +53,8 @@ class FeaturesGenerator:
             return self.rdkit_2d_features_generator(mol)
         elif self.features_generator_name == 'rdkit_2d_normalized':
             return self.rdkit_2d_normalized_features_generator(mol)
+        elif self.features_generator_name == 'rdkit_topol':
+            return self.rdkit_topological_features_generator(mol)
         elif self.features_generator_name == 'layered':
             return self.layered_features_generator(mol)
         elif self.features_generator_name == 'torsion':
@@ -87,7 +94,7 @@ class FeaturesGenerator:
         :return: A 1D numpy array containing the counts-based Morgan fingerprint.
         """
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
-        return np.array(self.generator.GetFingerprint(mol).ToList())
+        return np.array(self.generator.GetCountFingerprint(mol).ToList())
 
     def circular_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         features = self.generator.featurize([mol]).ravel()
