@@ -16,7 +16,6 @@ import networkx as nx
 from graphdot.graph._from_networkx import _from_networkx
 from ..features_mol import FeaturesGenerator
 from ..graph.hashgraph import HashGraph
-from .public import QM7, QM9
 
 # Cache of RDKit molecules
 CACHE_MOL = True
@@ -96,7 +95,7 @@ class MolecularGraph2D:
 
 class ReactionGraph2D:
     """
-    SingleReactionDatapoint： 2D graph of a single chemical reaction.
+    SingleReactionDatapoint: 2D graph of a single chemical reaction.
     """
 
     def __init__(self, reaction_smarts: str,
@@ -592,32 +591,6 @@ class Dataset:
         data = SubDataset(CompositeDatapoint(data_p, data_m, data_r, data_3d), targets, features)
         data.set_features(features_generator, features_combination)
         return data
-
-    """
-    @classmethod
-    def from_public(cls, args: CommonArgs):
-        if args.data_public == 'qm7':
-            qm_data = QM7(ase=True)
-        elif args.data_public == 'qm9':
-            qm_data = QM9(ase=True)
-        else:
-            raise RuntimeError(f'Unknown public data set {args.data_public}')
-        data = Parallel(
-            n_jobs=args.n_jobs, verbose=True, prefer='processes')(
-            delayed(cls.get_subDataset)(
-                [],
-                [],
-                args.mixture_type,
-                [],
-                args.reaction_type,
-                tolist(qm_data.iloc[i].get('atoms')),
-                to_numpy(qm_data.iloc[i:i+1][args.target_columns]),
-                to_numpy(qm_data.iloc[i:i+1].get(args.feature_columns)),
-                args.features_generator,
-            )
-            for i in qm_data.index)
-        return cls(data)
-    """
 
     @classmethod
     def from_df(cls, df: pd.DataFrame,

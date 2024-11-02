@@ -9,21 +9,19 @@ from rdkit.Avalon.pyAvalonTools import GetAvalonFP, GetAvalonCountFP
 from descriptastorus.descriptors import rdDescriptors, rdNormalizedDescriptors
 
 
+AVAILABLE_FEATURES_GENERATORS = ['morgan', 'morgan_count', 'circular', 'rdkit_208', 'rdkit_2d', 'rdkit_2d_normalized', 'rdkit_topol', 'layered', 'torsion', 'atom_pair', 'avalon', 'avalon_count', 'maccskey', 'pattern']
+
+
 class FeaturesGenerator:
-    def __init__(self, features_generator_name: Union[str, Callable],
+    def __init__(self, features_generator_name: str,
                  radius: int = 2,
                  num_bits: int = 2048,
                  atomInvariantsGenerator: bool = False):
         self.features_generator_name = features_generator_name
         self.radius = radius
         self.num_bits = num_bits
-        if features_generator_name in ['morgan', 'morgan_count']:
-            if atomInvariantsGenerator:
-                invgen = AllChem.GetMorganFeatureAtomInvGen()
-                self.generator = AllChem.GetMorganGenerator(radius=radius, fpSize=num_bits, atomInvariantsGenerator=invgen)
-            else:
-                self.generator = AllChem.GetMorganGenerator(radius=radius, fpSize=num_bits)
-        elif features_generator_name == 'circular':
+        self.atomInvariantsGenerator = atomInvariantsGenerator
+        if features_generator_name == 'circular':
             import deepchem
             self.generator = deepchem.feat.CircularFingerprint(radius=radius, size=num_bits, 
                                                                sparse=False, smiles=True)
@@ -31,12 +29,6 @@ class FeaturesGenerator:
             self.generator = rdDescriptors.RDKit2D()
         elif features_generator_name == 'rdkit_2d_normalized':
             self.generator = rdNormalizedDescriptors.RDKit2DNormalized()
-        elif features_generator_name == 'torsion':
-            self.generator = AllChem.GetTopologicalTorsionGenerator(fpSize=num_bits)
-        elif features_generator_name == 'atom_pair':
-            self.generator = AllChem.GetAtomPairGenerator(fpSize=num_bits)
-        elif features_generator_name == 'rdkit_topol':
-            self.generator = AllChem.GetRDKitFPGenerator(fpSize=num_bits)
 
     def __call__(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         if self.features_generator_name.__class__ != str:
@@ -81,8 +73,13 @@ class FeaturesGenerator:
         :param num_bits: Number of bits in Morgan fingerprint.
         :return: A 1D numpy array containing the binary Morgan fingerprint.
         """
+        if self.atomInvariantsGenerator:
+            invgen = AllChem.GetMorganFeatureAtomInvGen()
+            generator = AllChem.GetMorganGenerator(radius=self.radius, fpSize=self.num_bits, atomInvariantsGenerator=invgen)
+        else:
+            generator = AllChem.GetMorganGenerator(radius=self.radius, fpSize=self.num_bits)
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
-        return np.array(self.generator.GetFingerprint(mol).ToList())
+        return np.array(generator.GetFingerprint(mol).ToList())
 
     def morgan_counts_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         """
@@ -93,8 +90,13 @@ class FeaturesGenerator:
         :param num_bits: Number of bits in Morgan fingerprint.
         :return: A 1D numpy array containing the counts-based Morgan fingerprint.
         """
+        if self.atomInvariantsGenerator:
+            invgen = AllChem.GetMorganFeatureAtomInvGen()
+            generator = AllChem.GetMorganGenerator(radius=self.radius, fpSize=self.num_bits, atomInvariantsGenerator=invgen)
+        else:
+            generator = AllChem.GetMorganGenerator(radius=self.radius, fpSize=self.num_bits)
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
-        return np.array(self.generator.GetCountFingerprint(mol).ToList())
+        return np.array(generator.GetCountFingerprint(mol).ToList())
 
     def circular_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         features = self.generator.featurize([mol]).ravel()
@@ -147,12 +149,14 @@ class FeaturesGenerator:
         return np.array(Chem.LayeredFingerprint(mol, fpSize=self.num_bits).ToList())
     
     def torsion_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
+        generator = AllChem.GetTopologicalTorsionGenerator(fpSize=self.num_bits)
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
-        return np.array(self.generator.GetFingerprint(mol).ToList())
+        return np.array(generator.GetFingerprint(mol).ToList())
 
     def atom_pair_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
+        generator = AllChem.GetAtomPairGenerator(fpSize=self.num_bits)
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
-        return np.array(self.generator.GetFingerprint(mol).ToList())
+        return np.array(generator.GetFingerprint(mol).ToList())
 
     def avalon_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
@@ -171,5 +175,6 @@ class FeaturesGenerator:
         return np.array(AllChem.rdmolops.PatternFingerprint(mol, fpSize=self.num_bits).ToList())
 
     def rdkit_topological_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
+        generator = AllChem.GetRDKitFPGenerator(fpSize=self.num_bits)
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
-        return np.array(self.generator.GetFingerprint(mol).ToList())
+        return np.array(generator.GetFingerprint(mol).ToList())
