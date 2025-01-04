@@ -3,14 +3,11 @@ Python Package using marginalized graph kernel (MGK) to predict molecular proper
 
 ## Installation
 Suggested Package Versions:
-Python==3.10, GCC==11.2, CUDA==11.7.
+Python>=3.9, GCC==11.2, CUDA==11.7.
 ```
-pip install numpy==1.22.3 git+https://gitlab.com/Xiangyan93/graphdot.git@feature/xy git+https://github.com/bp-kelley/descriptastorus
+pip install git+https://gitlab.com/Xiangyan93/graphdot.git@feature/xy
 pip install mgktools
 ```
-
-## Usage
-See [notebooks](https://github.com/Xiangyan93/mgktools/tree/main/notebooks)
 
 ## Hyperparameters
 [hyperparameters](https://github.com/Xiangyan93/mgktools/tree/main/mgktools/hyperparameters) contains the JSON files that
