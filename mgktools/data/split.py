@@ -1,15 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
+from typing import Dict, List, Union, Literal, Set
+import math
+import numpy as np
 from collections import defaultdict
 from random import Random
-from typing import Dict, List, Set, Tuple, Union
 from rdkit import Chem
 from rdkit.Chem.Scaffolds import MurckoScaffold
 from tqdm import tqdm
-import math
 from logging import Logger
-import numpy as np
 
 
 def get_data_from_index(dataset, index):

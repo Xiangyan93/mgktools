@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
-
-CWD = os.path.dirname(os.path.abspath(__file__))
-import pandas as pd
+import networkx as nx
 from graphdot import Graph
 from graphdot.graph._from_networkx import _from_networkx
-import networkx as nx
 from rxntools.reaction import *
-from .from_rdkit import _from_rdkit, default_config, AtomBondFeaturesConfig
+from mgktools.graph.from_rdkit import _from_rdkit, default_config, AtomBondFeaturesConfig
+
+
+CWD = os.path.dirname(os.path.abspath(__file__))
 
 
 class HashGraph(Graph):

@@ -1,48 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from typing import List, Optional, Literal, Tuple
 import os
-import itertools
-from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
 import math
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import inspect
+from rdkit import Chem
 from sklearn.model_selection import KFold
-from ..interpret.utils import save_mols_pkl
-from ..data import Dataset
-from ..data.split import get_data_from_index, dataset_split
-from .metric import Metric, eval_metric_func
-
-
-def data_augmentation(dataset: Dataset) -> List[Dataset]:
-    """
-    Data augmentation for the dataset.
-    """
-    n_p = len(dataset.data[0].data.data_p)
-    n_m = len(dataset.data[0].data.data_m)
-    n_cr = len(dataset.data[0].data.data_cr)
-    n_3d = len(dataset.data[0].data.data_3d)
-    assert n_p > 1 or n_m > 1 or n_cr > 1 or n_3d > 1, 'No need to augment data.'
-    datasets_copy = []
-    # create all shuffling index
-    for idx_p in itertools.permutations(range(n_p)):
-        for idx_m in itertools.permutations(range(n_m)):
-            for idx_cr in itertools.permutations(range(n_cr)):
-                for idx_3d in itertools.permutations(range(n_3d)):
-                    dataset_copy = dataset.copy()
-                    for data in dataset_copy.data:
-                        if n_p > 1:
-                            data.data.data_p = [data.data.data_p[i] for i in idx_p]
-                        if n_m > 1:
-                            data.data.data_m = [data.data.data_m[i] for i in idx_m]
-                        if n_cr > 1:
-                            data.data.data_cr = [data.data.data_cr[i] for i in idx_cr]
-                        if n_3d > 1:
-                            data.data.data_3d = [data.data.data_3d[i] for i in idx_3d]
-                        data.data.data = data.data.data_p + data.data.data_m + data.data.data_cr + data.data.data_3d
-                    datasets_copy.append(dataset_copy)
-    return datasets_copy
+from mgktools.interpret.utils import save_mols_pkl
+from mgktools.data.data import Dataset
+from mgktools.data.split import get_data_from_index, dataset_split
+from mgktools.evaluators.metric import Metric, metric_regression, metric_binary
 
 
 class Evaluator:
@@ -50,75 +20,82 @@ class Evaluator:
                  save_dir: str,
                  dataset: Dataset,
                  model,
-                 task_type: Literal['regression', 'binary', 'multi-class'],
-                 metrics: List[Metric],
-                 cross_validation: Literal['nfold', 'leave-one-out', 'Monte-Carlo'] = 'Monte-Carlo',
-                 nfold: int = None,
-                 split_type: Literal['random', 'scaffold_order', 'scaffold_random'] = None,
+                 task_type: Literal["regression", "binary", "multi-class"],
+                 metrics: List[Metric] = None,
+                 cross_validation: Literal["kFold", "leave-one-out", "Monte-Carlo", "no"] = "Monte-Carlo",
+                 n_splits: int = None,
+                 split_type: Literal["random", "scaffold_order", "scaffold_random"] = None,
                  split_sizes: List[float] = None,
                  num_folds: int = 1,
-                 return_std: bool = False,
-                 return_proba: bool = False,
                  evaluate_train: bool = False,
-                 augment_data: bool = False,
                  n_similar: Optional[int] = None,
                  kernel=None,
                  n_core: int = None,
                  atomic_attribution: bool = False,
+                 molecular_attribution: bool = False,
                  seed: int = 0,
                  verbose: bool = True
                  ):
-        """Evaluator that evaluate the performance of Monte Carlo cross-validation.
+        """Evaluator object to evaluate the performance of the machine learning model.
 
         Parameters
         ----------
         save_dir:
             The directory that save all output files.
         dataset:
-            The dataset for cross-validation or the training data.
+            The dataset used for cross-validation or as the training data.
         model:
             The machine learning model.
         task_type:
-        split_type
-        split_sizes
-        metrics
-        num_folds
-        return_std:
-            If True, the regression model will output posterior uncertainty.
-        return_proba:
-            If True, the classification model will output probability.
-        evaluate_train
-        augment_data:
-            If True, the dataset will be augmented by shuffling the order of the equivalent columns of the data.
+            The type of the task: "regression", "binary", "multi-class".
+        metrics:
+            The metrics used to evaluate the model.
+        cross_validation:
+            The type of cross-validation: "kFold", "leave-one-out", "Monte-Carlo", "no".
+        n_splits:
+            Number of folds. Must be at least 2.
+        split_type:
+            The type of the data split.
+        split_sizes:
+            The sizes of the data split.
+        num_folds:
+            The number of folds for cross-validation.
+        evaluate_train:
+            If True, the model will be evaluated on the training set.
         n_similar:
             n_similar molecules in the training set that are most similar to the molecule to be predicted will be
             outputed.
         kernel:
-            if n_similar is not None, kernel must not be None, too.
+            kernel function used to find the most similar molecules.
         n_core:
             useful for nystrom approximation. number of sample to be randomly selected in the core set.
-        seed
+        atomic_attribution:
+            If True, atomic attribution interpretability will be conducted.
+        molecular_attribution:
+            If True, molecular attribution interpretability will be conducted.
+        seed:
+            random seed for cross-validation.
         """
         self.save_dir = save_dir
-        if self.write_file and not os.path.exists(self.save_dir):
-            os.mkdir(self.save_dir)
+        if self.write_file:
+            if not os.path.exists(self.save_dir):
+                os.mkdir(self.save_dir)
+            self.logfile = open("%s/results.log" % self.save_dir, "w")
         self.dataset = dataset
         self.model = model
         self.task_type = task_type
         self.cross_validation = cross_validation
-        self.nfold = nfold
+        self.n_splits = n_splits
         self.split_type = split_type
         self.split_sizes = split_sizes
         self.metrics = metrics
         self.num_folds = num_folds
-        self.return_std = return_std
-        self.return_proba = return_proba
         self.evaluate_train = evaluate_train
-        self.augment_data = augment_data
         self.n_similar = n_similar
         self.kernel = kernel
         self.n_core = n_core
         self.atomic_attribution = atomic_attribution
+        self.molecular_attribution = molecular_attribution
         self.seed = seed
         self.verbose = verbose
 
@@ -129,323 +106,254 @@ class Evaluator:
         else:
             return True
 
-    def evaluate(self, external_test_dataset: Optional[Dataset] = None):
+    def run_cross_validation(self) -> float:
+        assert not self.atomic_attribution, "Atomic attribution interpretability is only supported for run_external()."
+        assert not self.molecular_attribution, "Molecular attribution interpretability is only supported for run_external()."
         # Leave-One-Out cross validation
-        if self.cross_validation == 'leave-one-out':
-            assert self.nfold is None, 'nfold must be None for LOOCV.'
-            assert self.split_type is None, 'split_type must be None for LOOCV.'
-            assert self.split_sizes is None, 'split_sizes must be None for LOOCV.'
-            return self._evaluate_loocv()
-        # Initialization
-        train_metrics_results = dict()
-        test_metrics_results = dict()
-        for metric in self.metrics:
-            train_metrics_results[metric] = []
-            test_metrics_results[metric] = []
-        # A external dataset is provided as the test set
-        if external_test_dataset is not None:
-            assert self.split_type is None
-            dataset_train = self.dataset
-            dataset_test = external_test_dataset
-            train_metrics, test_metrics = self.evaluate_train_test(dataset_train, dataset_test,
-                                                                   output_tag='ext')
-            for j, metric in enumerate(self.metrics):
-                if train_metrics is not None:
-                    train_metrics_results[metric].append(train_metrics[j])
-                if test_metrics is not None:
-                    test_metrics_results[metric].append(test_metrics[j])
-        else:
+        if self.cross_validation == "leave-one-out":
+            assert self.n_splits is None, "nfold must be None for LOOCV."
+            assert self.split_type is None, "split_type must be None for LOOCV."
+            assert self.split_sizes is None, "split_sizes must be None for LOOCV."
+            return self.eval_loocv()
+        elif self.cross_validation == "kFold":
+            assert self.n_splits is not None, "n_splits must be specified for nfold cross-validation."
             # repeat cross-validation for num_folds times
+            df_metrics = pd.DataFrame(columns=["metric", "no_targets_columns", "value", "seed", "split"])
             for i in range(self.num_folds):
-                if self.cross_validation == 'Monte-Carlo':
-                    # data splits
-                    assert self.split_type is not None, 'split_type must be specified for Monte-Carlo cross-validation.'
-                    assert self.split_sizes is not None, 'split_sizes must be specified for Monte-Carlo cross-validation.'
-                    if len(self.split_sizes) == 2:
-                        dataset_train, dataset_test = dataset_split(
-                            self.dataset,
-                            split_type=self.split_type,
-                            sizes=self.split_sizes,
-                            seed=self.seed + i)
-                    # the second part, validation set, is abandoned.
-                    elif len(self.split_sizes) == 3:
-                        dataset_train, _, dataset_test = dataset_split(
-                            self.dataset,
-                            split_type=self.split_type,
-                            sizes=self.split_sizes,
-                            seed=self.seed + i)
-                    else:
-                        raise ValueError('split_sizes must be 2 or 3.')
-                    train_metrics, test_metrics = self.evaluate_train_test(
-                        dataset_train, dataset_test,
-                        output_tag='%d' % i)
-                    for j, metric in enumerate(self.metrics):
-                        if train_metrics is not None:
-                            train_metrics_results[metric].append(train_metrics[j])
-                        if test_metrics is not None:
-                            test_metrics_results[metric].append(test_metrics[j])
-                elif self.cross_validation == 'n-fold':
-                    assert self.nfold is not None, 'nfold must be specified for nfold cross-validation.'
-                    kf = KFold(n_splits=self.nfold, shuffle=True, random_state=self.seed + i)
-                    kf.get_n_splits(self.dataset.X)
-                    for i_fold, (train_index, test_index) in enumerate(kf.split(self.dataset.X)):
-                        dataset_train = get_data_from_index(self.dataset, train_index)
-                        dataset_test = get_data_from_index(self.dataset, test_index)
-                        train_metrics, test_metrics = self.evaluate_train_test(
-                            dataset_train, dataset_test,
-                            output_tag='%d-%d' % (i, i_fold))
-                        for j, metric in enumerate(self.metrics):
-                            if train_metrics is not None:
-                                train_metrics_results[metric].append(train_metrics[j])
-                            if test_metrics is not None:
-                                test_metrics_results[metric].append(test_metrics[j])
+                kf = KFold(n_splits=self.n_splits, shuffle=True, random_state=self.seed + i)
+                kf.get_n_splits(self.dataset.X)
+                for i_fold, (train_index, test_index) in enumerate(kf.split(self.dataset.X)):
+                    dataset_train = get_data_from_index(self.dataset, train_index)
+                    dataset_test = get_data_from_index(self.dataset, test_index)
+                    df_predict, df_ = self.evaluate_train_test(dataset_train, dataset_test)
+                    df_predict.to_csv("%s/kFold_%d-%d_prediction.csv" % (self.save_dir, i, i_fold), index=False)
+                    df_["seed"] = self.seed + i
+                    df_["split"] = i_fold
+                    df_metrics = pd.concat([df_metrics, df_], ignore_index=True)
+            df_metrics.to_csv("%s/kFold_metrics.csv" % self.save_dir, index=False)
+            self.log("kFold cross-validation performance:")
+            self.log_metrics(df_metrics)
+            return df_metrics['value'].mean()
+        elif self.cross_validation == "Monte-Carlo":
+            assert self.split_type is not None, "split_type must be specified for Monte-Carlo cross-validation."
+            assert self.split_sizes is not None, "split_sizes must be specified for Monte-Carlo cross-validation."
+            df_metrics = pd.DataFrame(columns=["metric", "no_targets_columns", "value", "seed"])
+            for i in range(self.num_folds):
+                if len(self.split_sizes) == 2:
+                    dataset_train, dataset_test = dataset_split(
+                        self.dataset,
+                        split_type=self.split_type,
+                        sizes=self.split_sizes,
+                        seed=self.seed + i)
+                # the second part, validation set, is abandoned.
+                elif len(self.split_sizes) == 3:
+                    dataset_train, _, dataset_test = dataset_split(
+                        self.dataset,
+                        split_type=self.split_type,
+                        sizes=self.split_sizes,
+                        seed=self.seed + i)
                 else:
-                    raise ValueError('Unsupported cross-validation method %s.' % self.cross_validation)
+                    raise ValueError("split_sizes must be 2 or 3.")
+                df_predict, df_ = self.evaluate_train_test(dataset_train, dataset_test)
+                df_predict.to_csv("%s/test_%d_prediction.csv" % (self.save_dir, i), index=False)
+                df_["seed"] = self.seed + i
+                df_metrics = pd.concat([df_metrics, df_], ignore_index=True)
+            df_metrics.to_csv("%s/Monte-Carlo_metrics.csv" % self.save_dir, index=False)
+            self.log("Monte-Carlo cross-validation performance:")
+            self.log_metrics(df_metrics)
+            return df_metrics['value'].mean()
+        elif self.cross_validation == "no":
+            raise ValueError("When set cross_validation to 'no', please use run_external() not eval_cross_validation.")
+        else:
+            raise ValueError("Unsupported cross-validation method %s." % self.cross_validation)
 
+    def run_external(self, dataset_test: Dataset):
+        assert self.cross_validation == "no", "cross_validation must be 'no' for run_external()."
         if self.evaluate_train:
-            self._log('\nTraining set:')
-            for metric, result in train_metrics_results.items():
-                self._log('%s: %.5f +/- %.5f' % (metric, np.nanmean(result), np.nanstd(result)))
-                # self._log(np.asarray(result).ravel())
-        self._log('\nTest set:')
-        for metric, result in test_metrics_results.items():
-            self._log('%s: %.5f +/- %.5f' % (metric, np.nanmean(result), np.nanstd(result)))
-        return np.nanmean(test_metrics_results[self.metrics[0]])
+            df_predict, df_metrics = self.evaluate_train_test(self.dataset, self.dataset)
+            df_predict.to_csv("%s/train_prediction.csv" % self.save_dir, index=False)
+            if df_metrics is not None:
+                # Calculate metrics values.
+                df_metrics.to_csv("%s/train_metrics.csv" % self.save_dir, index=False)
+                self.log("Training set performance:")
+                self.log_metrics(df_metrics)
+        df_predict, df_metrics = self.evaluate_train_test(self.dataset, dataset_test)
+        df_predict.to_csv("%s/test_ext_prediction.csv" % self.save_dir, index=False)
+        if df_metrics is not None:
+            # Calculate metrics values.
+            df_metrics.to_csv("%s/test_ext_metrics.csv" % self.save_dir, index=False)
+            self.log("External test set performance:")
+            self.log_metrics(df_metrics)
+        if self.atomic_attribution:
+            mols = self.get_interpreted_mols(dataset_test)
+            save_mols_pkl(mols=mols, path=self.save_dir, filename="atomic_attribution.pkl")
+        if self.molecular_attribution:
+            n_mol = 10000
+            c_percentage, c_y = self.model.predict_interpretable(dataset_test.X)
+            idx_list = np.argsort(-np.fabs(c_percentage))[:, :min(n_mol, c_percentage.shape[1])]
+            for i, idx in enumerate(idx_list):
+                df = pd.DataFrame({"smiles_train": np.array(self.dataset.repr)[idx],
+                                   "contribution_percentage": c_percentage[i][idx],
+                                   "contribution_value": c_y[i][idx]})
+                df.to_csv("%s/molecular_attribution_mol%d.csv" % (self.save_dir, i), index=False)
+
+    def eval_loocv(self) -> float:
+        df_predict, df_metrics = self.evaluate_train_test(self.dataset, self.dataset)
+        df_predict.to_csv("%s/loocv_prediction.csv" % self.save_dir, index=False)
+        df_metrics.to_csv("%s/loocv_metrics.csv" % self.save_dir, index=False)
+        # Calculate metrics values.
+        self.log("Leave-one-out cross-validation performance:")
+        self.log_metrics(df_metrics)
+        return df_metrics['value'].mean()
 
     def evaluate_train_test(self, dataset_train: Dataset,
-                            dataset_test: Dataset,
-                            output_tag: str = '0') -> Tuple[Optional[List[float]],
-                                                            Optional[
-                                                            List[float]]]:
-        if self.augment_data:
-            for dataset in data_augmentation(dataset_train)[1:]:
-                dataset_train.data.extend(dataset.data)
-            for dataset in data_augmentation(dataset_test)[1:]:
-                dataset_test.data.extend(dataset.data)
-        train_log = 'train_%s.csv' % output_tag
-        test_log = 'test_%s.csv' % output_tag
-
-        X_train = dataset_train.X
-        y_train = dataset_train.y
-        if y_train.shape[1] == 1:
-            y_train = y_train.ravel()
-        repr_train = dataset_train.repr
-        X_test = dataset_test.X
-        y_test = dataset_test.y
-        if y_test.shape[1] == 1:
-            y_test = y_test.ravel()
-        repr_test = dataset_test.repr
-        # Find the most similar sample in training sets.
-        if self.n_similar is None:
-            y_similar = None
-        else:
-            y_similar = self.get_similar_info(X_test, X_train, repr_train, self.n_similar)
-
-        train_metrics = None
-        self.fit(X_train, y_train)
-
-        # save results test_*.log
-        test_metrics = self._eval(X_test, y_test, repr_test, y_similar,
-                                  logfile=None if test_log is None else '%s/%s' % (self.save_dir, test_log))
-
-        if self.atomic_attribution:
-            self.interpret(dataset_test, output_tag=output_tag)
-
-        if self.evaluate_train:
-            train_metrics = self._eval(X_train, y_train, repr_train, repr_train,
-                                       logfile=None if train_log is None else '%s/%s' % (self.save_dir, train_log))
-
-        return train_metrics, test_metrics
-
-    def _evaluate_loocv(self):
-        X, y, repr = self.dataset.X, self.dataset.y, self.dataset.repr
-        if y.shape[1] == 1:
-            y = y.ravel()
+                            dataset_test: Dataset) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        test_targets_known = (dataset_train.N_tasks == dataset_test.N_tasks)
+        pred_dict = {"repr": dataset_test.repr}
+        y_preds = []
+        for i in range(dataset_train.N_tasks):
+            if self.cross_validation == "leave-one-out":
+                y_pred, y_std = self.model.predict_loocv(dataset_test.X, dataset_test.y[:, i], return_std=True)
+            else:
+                self.fit(dataset_train.X, dataset_train.y[:, i])
+                if self.task_type == "regression":
+                    sig = inspect.signature(self.model.predict)
+                    if "return_std" in sig.parameters:
+                        y_pred, y_std = self.model.predict(dataset_test.X, return_std=True)
+                    else:
+                        y_pred, y_std = self.model.predict(dataset_test.X), None
+                elif self.task_type == "binary":
+                    y_std = None
+                    if hasattr(self.model, "predict_proba"):
+                        y_pred = self.model.predict_proba(dataset_test.X)
+                    else:
+                        y_pred = self.model.predict(dataset_test.X)
+            if test_targets_known:
+                pred_dict["target_%d" % i] = dataset_test.y[:, i]
+            pred_dict["predict_%d" % i] = y_pred
+            if y_std is not None:
+                pred_dict["uncertainty_%d" % i] = y_std
+            y_preds.append(y_pred.tolist())
         if self.n_similar is not None:
-            y_similar = self.get_similar_info(X, X, repr, self.n_similar)
+            y_similar = self.get_similar_info(dataset_test.X, dataset_train.X, dataset_train.repr, self.n_similar)
+            pred_dict["y_similar"] = y_similar
+        df_predict = pd.DataFrame(pred_dict)
+        if test_targets_known:
+            metrics_data = []
+            for metric in self.metrics:
+                for i in range(dataset_train.N_tasks):
+                    v = self.eval_metric(dataset_test.y[:, i], y_preds[i], metric)
+                    metrics_data.append([metric, i, v])
+            df_metrics = pd.DataFrame(metrics_data, columns=["metric", "no_targets_columns", "value"])
+            return df_predict, df_metrics
         else:
-            y_similar = None
-        """
-        # optimize hyperparameters.
-        if self.args.optimizer is not None:
-            self.model.fit(X, y, loss='loocv', verbose=True)
-        """
-        loocv_metrics = self._eval(X, y, repr, y_similar,
-                                   logfile='%s/%s' % (self.save_dir, 'loocv.csv'))
-        self._log('LOOCV:')
-        for i, metric in enumerate(self.metrics):
-            self._log('%s: %.5f' % (metric, loocv_metrics[i]))
-        return loocv_metrics[0]
+            return df_predict, None
 
     def fit(self, X, y):
         if self.n_core is not None:
             idx = np.random.choice(np.arange(len(X)), self.n_core, replace=False)
             C_train = X[idx]
             self.model.fit(C_train, X, y)
-        # elif self.args.dataset_type == 'regression' and self.args.model_type == 'gpr' and not self.args.ensemble:
-        #    self.model.fit(X_train, y_train, loss=self.args.loss, verbose=True)
         else:
             self.model.fit(X, y)
 
-    def predict(self, X, y: np.ndarray, repr: List[str], y_similar: List[str] = None):
-        if self.cross_validation == 'leave-one-out':
-            y_pred, y_std = self.model.predict_loocv(X, y, return_std=True)
-        elif self.return_std:
-            y_pred, y_std = self.model.predict(X, return_std=True)
-        elif self.return_proba:
-            y_pred = self.model.predict_proba(X)
-            y_std = None
-        else:
-            y_pred = self.model.predict(X)
-            y_std = None
-        if y is None:
-            pred_dict = {
-                'predict': y_pred,
-                'repr': repr,
-            }
-            if y_std is not None:
-                pred_dict['uncertainty'] = y_std
-        elif y.ndim == 2:
-            assert y_pred.ndim == 2
-            assert y_std is None or y_std.ndim == 2
-            pred_dict = {}
-            for i in range(y.shape[1]):
-                pred_dict['target_%d' % i] = y[:, i]
-                pred_dict['predict_%d' % i] = y_pred[:, i]
-                if y_std is not None:
-                    pred_dict['uncertainty_%d' % i] = y_std[:, i]
-            pred_dict['repr'] = repr
-        else:
-            pred_dict = {
-                'target': y,
-                'predict': y_pred,
-                'repr': repr,
-            }
-            if y_std is not None:
-                pred_dict['uncertainty'] = y_std
-        if y_similar is not None:
-            pred_dict['y_similar'] = y_similar
-        return self.df_output(**pred_dict)
-
-    def interpret(self, dataset_test, output_tag: str):
+    def get_interpreted_mols(self, dataset_test) -> List[Chem.Mol]:
         X_test = dataset_test.X
-        mols_to_be_interpret = dataset_test.mols
-        batch_size = 100
+        assert dataset_test.mols.shape[1] == 1, "interpretability is only valid for single-graph data"
+        mols_to_be_interpret = dataset_test.mols.ravel()
+        batch_size = 1
         N_batch = math.ceil(len(mols_to_be_interpret) / batch_size)
         for i in tqdm(range(N_batch)):
             start = batch_size * i
             end = batch_size * (i + 1)
             if end > len(mols_to_be_interpret):
                 end = len(mols_to_be_interpret)
-            g = X_test[start:end, :]
+            g = X_test.ravel()[start:end]
             y_nodes = self.model.predict_nodal(g)
+            print(y_nodes)
             k = 0
             for j in range(start, end):
-                m = mols_to_be_interpret[j]
-                assert len(m) == 1, 'interpretability is only valid for single-graph data'
-                mol = m[0]
+                mol = mols_to_be_interpret[j]
                 for atom in mol.GetAtoms():
-                    atom.SetProp('atomNote', '%.6f' % y_nodes[k])
+                    atom.SetProp("atomNote", "%.6f" % y_nodes[k])
                     k += 1
             assert k == len(y_nodes)
-        save_mols_pkl(mols=[m[0]for m in mols_to_be_interpret], path=self.save_dir, filename='imgk_%s.pkl' % output_tag)
+        return mols_to_be_interpret.tolist()
 
-    def get_similar_info(self, X, X_train, X_repr, n_most_similar) -> List[str]:
-        K = self.kernel(X, X_train)
-        assert (K.shape == (len(X), len(X_train)))
+    def get_similar_info(self, X_test: np.ndarray, X_train: np.ndarray, 
+                         X_repr: List[str], n_most_similar: int) -> List[str]:
+        """Get the most similar molecules in the training set for each molecule in the test set.
+        
+        Parameters
+        ----------
+        X_test: np.ndarray
+            The test set.
+        X_train: np.ndarray
+            The training set.
+        X_repr: List[str]
+            The representation of the training set molecules.
+        n_most_similar: int
+            The number of most similar molecules to be output.
+        
+        Returns
+        -------
+        List[str]
+            The information of the most similar molecules in the training set and the cross kernel 
+            value (similarity) for each molecule in the test set.
+        """
+        K = self.kernel(X_test, X_train)
+        assert (K.shape == (len(X_test), len(X_train)))
         similar_info = []
-        kindex = self.get_most_similar_graphs(K, n=n_most_similar)
+        kindex = np.argsort(-K)[:, :min(n_most_similar, K.shape[1])]
         for i, index in enumerate(kindex):
             def round5(x):
-                return ',%.5f' % x
-
+                return ",%.5f" % x
             k = list(map(round5, K[i][index]))
             repr = np.asarray(X_repr)[index]
-            info = ';'.join(list(map(str.__add__, repr, k)))
+            info = ";".join(list(map(str.__add__, repr, k)))
             similar_info.append(info)
         return similar_info
 
-    @staticmethod
-    def get_most_similar_graphs(K, n=5):
-        return np.argsort(-K)[:, :min(n, K.shape[1])]
+    def eval_metric(self, y, y_pred, metric):
+        if self.task_type == "regression":
+            return metric_regression(y, y_pred, metric)
+        elif self.task_type == "binary":
+            return metric_binary(y, y_pred, metric)
+        elif self.task_type == "multi-class":
+            raise NotImplementedError("multi-class classification is not supported yet.")
+            # return metric_multiclass(y, y_pred, metric)
 
-    @staticmethod
-    def df_output(**kwargs):
-        df = kwargs.copy()
-        for key, value in kwargs.items():
-            if value is None:
-                df.pop(key)
-        return pd.DataFrame(df)
-
-    def _eval(self, X,
-              y: np.ndarray,  # 1-d or 2-d array
-              repr: List[str],
-              y_similar: List[str],
-              logfile: str):
-        df_output = self.predict(X, y, repr, y_similar=y_similar)
-        if logfile is not None and self.write_file:
-            df_output.to_csv(logfile, sep='\t', index=False, float_format='%15.10f')
-        if y is None:
-            return None
-        else:
-            if y.ndim == 2:
-                y_pred = df_output[['predict_%d' % i for i in range(y.shape[1])]].to_numpy()
+    def log_metrics(self, df_metrics: pd.DataFrame):
+        N_targets_columns = df_metrics["no_targets_columns"].max() + 1
+        for metric in self.metrics:
+            df_ = df_metrics[df_metrics["metric"] == metric]
+            assert len(df_) > 0
+            if len(df_) == 1:
+                self.log(f"Metric({metric}): %.5f" % df_["value"].iloc[0])
             else:
-                y_pred = df_output['predict']
-            return [self._eval_metric(y, y_pred, metric, self.task_type) for metric in self.metrics]
-
-    def _eval_metric(self,
-                     y: np.ndarray,  # 1-d or 2-d array.
-                     y_pred: np.ndarray,  # 1-d or 2-d array.
-                     metric: Metric,
-                     task_type: Literal['regression', 'binary', 'multi-class']) -> float:
-        if y.ndim == 2 and y_pred.ndim == 2:
-            num_tasks = y.shape[1]
-            results = []
-            for i in range(num_tasks):
-                results.append(self._metric_func(y[:, i],
-                                                 y_pred[:, i],
-                                                 metric,
-                                                 task_type))
-            return np.nanmean(results)
-        else:
-            return self._metric_func(y, y_pred, metric, task_type)
-
-    def _metric_func(self,
-                     y: np.ndarray,  # 1-d array.
-                     y_pred: np.ndarray,  # 1-d array.
-                     metric: Metric,
-                     task_type: Literal['regression', 'binary', 'multi-class']) -> float:
-        # y_pred has nan may happen when train_y are all 1 (or 0).
-        if task_type == 'binary' and y_pred.dtype != object and True in np.isnan(y_pred):
-            return np.nan
-        # y may be unlabeled in some index. Select index of labeled data.
-        if y.dtype == float:
-            idx = ~np.isnan(y)
-            y = y[idx]
-            y_pred = y_pred[idx]
-        if task_type in ['binary', 'multi-class']:
-            if len(set(y)) == 1:
-                return np.nan
-
-        if task_type in ['regression', 'binary']:
-            return eval_metric_func(y, y_pred=y_pred, metric=metric)
-        elif task_type == 'multi-class':
-            if metric == 'accuracy':
-                return accuracy_score(y, y_pred)
-            elif metric == 'precision':
-                return precision_score(y, y_pred, average='macro')
-            elif metric == 'recall':
-                return recall_score(y, y_pred, average='macro')
-            elif metric == 'f1_score':
-                return f1_score(y, y_pred, average='macro')
+                self.log(f"Metric({metric}): %.5f +/- %.5f" % (df_["value"].mean(), df_["value"].std()))
+        for i in range(N_targets_columns):
+            df_ = df_metrics[df_metrics["no_targets_columns"] == i]
+            assert len(df_) > 0
+            if len(df_) == 1:
+                self.log(f"Target({i}): %.5f" % df_["value"].iloc[0])
             else:
-                raise RuntimeError(f'Unsupported metrics {metric} for multi-class classification task.')
-        else:
-            raise RuntimeError(f'Unsupported task_type {task_type}.')
+                self.log(f"Target({i}): %.5f +/- %.5f" % (df_["value"].mean(), df_["value"].std()))
+        for i in range(N_targets_columns):
+            for metric in self.metrics:
+                df_ = df_metrics[(df_metrics["metric"] == metric) & (df_metrics["no_targets_columns"] == i)]
+                assert len(df_) > 0
+                if len(df_) == 1:
+                    self.log(f"Target({i}),Metric({metric}): %.5f" % df_["value"].iloc[0])
+                else:
+                    self.log(f"Target({i}),Metric({metric}): %.5f +/- %.5f" % (df_["value"].mean(), df_["value"].std()))
 
-    def _log(self, info: str):
+    def log(self, info: str):
         if self.verbose:
-            print(info)
+            if self.write_file:
+                self.logfile.write(info + "\n")
+            else:
+                print(info)
         else:
             pass
+    

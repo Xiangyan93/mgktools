@@ -3,7 +3,7 @@
 import os
 import pickle
 from typing import Dict, List, Literal, Tuple
-from mgktools.data import Dataset
+from mgktools.data.data import Dataset
 from mgktools.kernels.FeatureKernel import FeatureKernelConfig
 from mgktools.kernels.PreComputed import PreComputedKernelConfig
 from mgktools.kernels.HybridKernel import HybridKernelConfig
@@ -11,7 +11,7 @@ from mgktools.kernels.HybridKernel import HybridKernelConfig
 
 def get_kernel_config(
     dataset: Dataset,
-    graph_kernel_type: Literal["graph", "pre-computed", None],
+    graph_kernel_type: Literal["graph", "pre-computed", 'no'],
     # arguments for vectorized features.
     features_kernel_type: Literal["dot_product", "rbf"] = None,
     features_hyperparameters: List[float] = None,
@@ -23,7 +23,7 @@ def get_kernel_config(
     kernel_dict: Dict = None,
     kernel_pkl: str = None,
 ):
-    if kernel_pkl is not None and os.path.exists(kernel_pkl):
+    if kernel_pkl is not None and os.path.exists(kernel_pkl) and graph_kernel_type == "pre-computed":
         return pickle.load(open(kernel_pkl, "rb"))
 
     if graph_kernel_type == "pre-computed":

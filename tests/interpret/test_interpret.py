@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import pytest
-from mgktools.data import Dataset
+from mgktools.data.data import Dataset
 from mgktools.interpret.interpret import interpret_training_mols, interpret_atoms, get_interpreted_mols
 from mgktools.hyperparameters import additive_pnorm, product_pnorm
 
-pure = ['CN(C)C(=O)c1ccc(cc1)OC', 'CS(=O)(=O)Cl', 'CC(C)C=C', 'CCc1cnccn1']
+smiles = ['CN(C)C(=O)c1ccc(cc1)OC', 'CS(=O)(=O)Cl', 'CC(C)C=C', 'CCc1cnccn1']
 targets = [-11.01, -4.87, 1.83, -5.45]
-df = pd.DataFrame({'pure': pure, 'targets_1': targets})
+df = pd.DataFrame({'smiles': smiles, 'targets_1': targets})
 
 
 @pytest.mark.parametrize('testset', [
@@ -19,7 +19,7 @@ def test_interpret_training_mols(testset):
     mgk_hyperparameters_file = testset
     y_pred, y_std, df_interpret = interpret_training_mols(
         smiles_to_be_interpret=['Cc1cc(cc(c1)O)C', 'CCC'],
-        smiles_train=pure,
+        smiles_train=smiles,
         targets_train=targets,
         alpha=0.01,
         n_mol=10,
@@ -38,7 +38,7 @@ def test_interpret_atoms(testset):
     mgk_hyperparameters_file = testset
     y_pred, y_std, mol = interpret_atoms(
         smiles_to_be_interpret='Cc1cc(cc(c1)O)C',
-        smiles_train=pure,
+        smiles_train=smiles,
         targets_train=targets,
         alpha=0.01,
         mgk_hyperparameters_file=mgk_hyperparameters_file)
@@ -57,7 +57,7 @@ def test_get_interpreted_mols(testset, batch_size):
     mgk_hyperparameters_file = testset
     batch_size = batch_size
     smiles_to_be_interpret = ['Cc1cc(cc(c1)O)C', 'CC(C)C(C)C', 'CCCO', 'C1CCCC1CCO']
-    y_pred, y_std, mols = get_interpreted_mols(smiles_train=pure,
+    y_pred, y_std, mols = get_interpreted_mols(smiles_train=smiles,
                                                targets_train=targets,
                                                smiles_to_be_interpret=smiles_to_be_interpret,
                                                mgk_hyperparameters_file=mgk_hyperparameters_file,

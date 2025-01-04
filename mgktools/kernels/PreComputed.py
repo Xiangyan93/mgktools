@@ -3,10 +3,9 @@
 from typing import Dict, Any, Union
 import numpy as np
 import copy
-from mgktools.data import Dataset
+from mgktools.data.data import Dataset
 from mgktools.kernels.base import BaseKernelConfig
 from mgktools.kernels.HybridKernel import HybridKernelConfig
-from mgktools.data.data import concatenate
 
 
 class PreComputedKernel:
@@ -101,23 +100,22 @@ def calc_precomputed_kernel_config(
     from mgktools.kernels.GraphKernel import GraphKernelConfig
     if isinstance(kernel_config, GraphKernelConfig):
         # Single graph kernel, no feature kernel.
-        assert dataset.N_features_mol == dataset.N_features_add == 0
+        assert dataset.N_features_mol == 0
         kernel_dict = kernel_config.get_kernel_dict(
-            dataset.X_mol, dataset.X_graph_repr.ravel()
+            dataset.X_graph, dataset.X_smiles.ravel()
         )
         return PreComputedKernelConfig(kernel_dict=kernel_dict)
     else:
-        n_MGK = sum(
-            [isinstance(kc, GraphKernelConfig) for kc in kernel_config.kernel_configs]
-        )
+        N_MGK = sum([isinstance(kc, GraphKernelConfig) for kc in kernel_config.kernel_configs])
+        assert N_MGK == dataset.N_MGK, f"{N_MGK}, {dataset.N_MGK}"
         if dataset.N_features_mol == dataset.N_features_add == 0:
             # multiple graph kernels, no feature kernel.
-            assert n_MGK == len(kernel_config.kernel_configs)
+            assert N_MGK == len(kernel_config.kernel_configs)
             precomputed_kernel_configs = []
-            for i in range(n_MGK):
+            for i in range(N_MGK):
                 kc = kernel_config.kernel_configs[i]
                 kernel_dict = kc.get_kernel_dict(
-                    dataset.X_mol[:, i], dataset.X_graph_repr[:, i].ravel()
+                    dataset.X_mol[:, i], dataset.X_smiles[:, i].ravel()
                 )
                 precomputed_kernel_configs.append(
                     PreComputedKernelConfig(kernel_dict=kernel_dict)
@@ -130,36 +128,36 @@ def calc_precomputed_kernel_config(
         elif dataset.N_features_mol == 0 and dataset.N_features_add != 0:
             # multiple graph kernel + additional features.
             precomputed_kernel_configs = []
-            for i in range(n_MGK):
+            for i in range(N_MGK):
                 kc = kernel_config.kernel_configs[i]
                 kernel_dict = kc.get_kernel_dict(
-                    dataset.X_mol[:, i], dataset.X_graph_repr[:, i].ravel()
+                    dataset.X_mol[:, i], dataset.X_smiles[:, i].ravel()
                 )
                 precomputed_kernel_configs.append(
                     PreComputedKernelConfig(kernel_dict=kernel_dict)
                 )
             return HybridKernelConfig(
                 kernel_configs=precomputed_kernel_configs
-                + kernel_config.kernel_configs[n_MGK:],
+                + kernel_config.kernel_configs[N_MGK:],
                 composition=kernel_config.composition,
                 hybrid_rule=kernel_config.hybrid_rule,
             )
         elif dataset.N_features_mol != 0 and dataset.N_features_add == 0:
             # multiple graph kernels + molecular features, no feature kernel.
-            if n_MGK == 1:
+            if N_MGK == 1:
                 assert len(kernel_config.kernel_configs) == 2
                 kernel_dict = kernel_config.get_kernel_dict(
-                    dataset.X_mol, dataset.X_graph_repr.ravel()
+                    dataset.X_mol, dataset.X_smiles.ravel()
                 )
                 return PreComputedKernelConfig(kernel_dict=kernel_dict)
             else:
-                assert dataset.N_features_mol % n_MGK == 0
-                n_features_per_mol = int(dataset.N_features_mol / n_MGK)
-                assert dataset.X_mol.shape[1] == n_MGK * (1 + n_features_per_mol)
-                assert len(kernel_config.kernel_configs) == n_MGK + 1, f'{len(kernel_config.kernel_configs)}, {n_MGK}'
+                assert dataset.N_features_mol % N_MGK == 0
+                n_features_per_mol = int(dataset.N_features_mol / N_MGK)
+                assert dataset.X_mol.shape[1] == N_MGK * (1 + n_features_per_mol)
+                assert len(kernel_config.kernel_configs) == N_MGK + 1, f'{len(kernel_config.kernel_configs)}, {N_MGK}'
                 assert isinstance(kernel_config.kernel_configs[-1].microkernels_feature[0].value, float)
                 precomputed_kernel_configs = []
-                for i in range(n_MGK):
+                for i in range(N_MGK):
                     kc1 = kernel_config.kernel_configs[i]
                     kc2 = kernel_config.kernel_configs[-1]
                     kc = HybridKernelConfig(
@@ -170,35 +168,35 @@ def calc_precomputed_kernel_config(
                     X_graph = dataset.X_mol[:, i : i + 1]
                     X_features = dataset.X_mol[
                         :,
-                        n_MGK
-                        + i * n_features_per_mol : n_MGK
+                        N_MGK
+                        + i * n_features_per_mol : N_MGK
                         + (i + 1) * n_features_per_mol,
                     ]
                     kernel_dict = kc.get_kernel_dict(
-                        concatenate(
+                        np.concatenate(
                             [X_graph, X_features],
                             axis=1,
                             dtype=object,
                         ),
-                        dataset.X_graph_repr[:, i].ravel(),
+                        dataset.X_smiles[:, i].ravel(),
                     )
                     precomputed_kernel_configs.append(
                         PreComputedKernelConfig(kernel_dict=kernel_dict)
                     )
                 return HybridKernelConfig(
                     kernel_configs=precomputed_kernel_configs,
-                    composition=kernel_config.composition[:n_MGK],
+                    composition=kernel_config.composition[:N_MGK],
                     hybrid_rule=kernel_config.hybrid_rule,
                 )
         else:
             # multiple graph kernels + molecular features + additional features.
-            assert dataset.N_features_mol % n_MGK == 0
-            n_features_per_mol = int(dataset.N_features_mol / n_MGK)
-            assert dataset.X_mol.shape[1] == n_MGK * (1 + n_features_per_mol)
-            assert len(kernel_config.kernel_configs) == n_MGK + 1, f'{len(kernel_config.kernel_configs)}, {n_MGK}'
+            assert dataset.N_features_mol % N_MGK == 0
+            n_features_per_mol = int(dataset.N_features_mol / N_MGK)
+            assert dataset.X_mol.shape[1] == N_MGK * (1 + n_features_per_mol)
+            assert len(kernel_config.kernel_configs) == N_MGK + 1, f'{len(kernel_config.kernel_configs)}, {N_MGK}'
             assert isinstance(kernel_config.kernel_configs[-1].microkernels_feature[0].value, float)
             precomputed_kernel_configs = []
-            for i in range(n_MGK):
+            for i in range(N_MGK):
                 kc1 = kernel_config.kernel_configs[i]
                 kc2 = kernel_config.kernel_configs[-1]
                 kc = HybridKernelConfig(
@@ -209,23 +207,23 @@ def calc_precomputed_kernel_config(
                 X_graph = dataset.X_mol[:, i : i + 1]
                 X_features = dataset.X_mol[
                     :,
-                    n_MGK
-                    + i * n_features_per_mol : n_MGK
+                    N_MGK
+                    + i * n_features_per_mol : N_MGK
                     + (i + 1) * n_features_per_mol,
                 ]
                 kernel_dict = kc.get_kernel_dict(
-                    concatenate(
+                    np.concatenate(
                         [X_graph, X_features],
                         axis=1,
                         dtype=object,
                     ),
-                    dataset.X_graph_repr[:, i].ravel(),
+                    dataset.X_smiles[:, i].ravel(),
                 )
                 precomputed_kernel_configs.append(
                     PreComputedKernelConfig(kernel_dict=kernel_dict)
                 )
             return HybridKernelConfig(
                 kernel_configs=precomputed_kernel_configs + [kernel_config.kernel_configs[-1]],
-                composition=kernel_config.composition[:n_MGK] + [tuple(range(n_MGK, n_MGK + dataset.N_features_add))],
+                composition=kernel_config.composition[:N_MGK] + [tuple(range(N_MGK, N_MGK + dataset.N_features_add))],
                 hybrid_rule=kernel_config.hybrid_rule,
             )

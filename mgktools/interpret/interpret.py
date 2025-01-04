@@ -9,10 +9,10 @@ import rdkit.Chem.AllChem as Chem
 import math
 from mgktools.hyperparameters import additive_pnorm
 from mgktools.graph.hashgraph import HashGraph
-from mgktools.data import Dataset
+from mgktools.data.data import Dataset
 from mgktools.kernels.utils import get_kernel_config
 from mgktools.kernels.GraphKernel import GraphKernelConfig
-from mgktools.interpret.gpr import InterpretableGaussianProcessRegressor as GPR
+from mgktools.models.regression.gpr.gpr import GaussianProcessRegressor
 
 
 def get_node_graphs(mol: Chem.Mol) -> List[HashGraph]:
@@ -45,7 +45,7 @@ def interpret_training_mols(smiles_to_be_interpret: List[str],
                             n_mol: int = 10,
                             output_order: Literal['sort_by_value', 'sort_by_percentage_contribution'] = 'sort_by_value',
                             mgk_hyperparameters_file: str = additive_pnorm,
-                            features_generator: List[str] = None,
+                            features_generators: List[str] = None,
                             features_hyperparameters_file: str = None,
                             n_jobs: int = 1,
                             return_kernel: bool = False):
@@ -53,7 +53,7 @@ def interpret_training_mols(smiles_to_be_interpret: List[str],
 
     Parameters
     ----------
-    smiles_to_be_interpret: string
+    smiles_to_be_interpret: List[string]
         SMILES string of the molecule to be predicted and interpreted.
     smiles_train: list of string
         SMILES of training set.
@@ -68,8 +68,14 @@ def interpret_training_mols(smiles_to_be_interpret: List[str],
         If 'sort_by_percentage_contribution', the interpretation will be ranked by the percentage contribution.
     mgk_hyperparameters_file: str
         hyperparameters for marginalized graph kernel.
+    features_generators: list of string
+        features generators for molecular features.
+    features_hyperparameters_file: str
+        hyperparameters for features generators.
     n_jobs: int
         number of processes when transforming smiles into graphs.
+    return_kernel: bool
+        if True, return the kernel value between training and testing set.
 
     Returns
     -------
@@ -77,19 +83,24 @@ def interpret_training_mols(smiles_to_be_interpret: List[str],
     """
     assert not isinstance(smiles_to_be_interpret, str)
     # graph_to_be_interpret = HashGraph.from_smiles(smiles_to_be_interpret)
-    graph_kernel_type = 'graph' if mgk_hyperparameters_file is not None else None
+    graph_kernel_type = 'graph' if mgk_hyperparameters_file is not None else 'no'
 
     df = pd.DataFrame({'smiles': smiles_train, 'target': targets_train})
-    train = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs,
-                            features_generator=features_generator)
-    train.graph_kernel_type = graph_kernel_type
+    train = Dataset.from_df(df, smiles_columns=['smiles'], targets_columns=['target'], n_jobs=n_jobs)
+    train.set_status(graph_kernel_type=graph_kernel_type,
+                     features_generators=features_generators,
+                     features_combination='concat')
     df = pd.DataFrame({'smiles': smiles_to_be_interpret, 'target': [0.] * len(smiles_to_be_interpret)})
-    test = Dataset.from_df(df, pure_columns=['smiles'], target_columns=['target'], n_jobs=n_jobs,
-                           features_generator=features_generator)
-    test.graph_kernel_type = graph_kernel_type
+    test = Dataset.from_df(df, smiles_columns=['smiles'], targets_columns=['target'], n_jobs=n_jobs, cache=train.cache)
+    test.set_status(graph_kernel_type=graph_kernel_type,
+                    features_generators=features_generators,
+                    features_combination='concat')
     full = train.copy()
     full.data = train.data + test.data
-    full.unify_datatype()
+    full.cache = train.cache
+    full.create_graphs(n_jobs=n_jobs)
+    if features_generators is not None:
+        full.create_features_mol(n_jobs=n_jobs)
     kernel_config = get_kernel_config(
         train,
         graph_kernel_type=graph_kernel_type,
@@ -98,7 +109,7 @@ def interpret_training_mols(smiles_to_be_interpret: List[str],
         features_hyperparameters_file=features_hyperparameters_file,
     )
     kernel = kernel_config.kernel
-    gpr = GPR(kernel=kernel, alpha=alpha, normalize_y=False).fit(train.X, train.y)
+    gpr = GaussianProcessRegressor(kernel=kernel, alpha=alpha, normalize_y=False).fit(train.X, train.y)
     y_pred, y_std = gpr.predict(test.X, return_std=True)
     c_percentage, c_y = gpr.predict_interpretable(test.X)
     if output_order == 'sort_by_value':
@@ -147,7 +158,7 @@ def interpret_atoms(smiles_to_be_interpret: str,
     HashGraph.unify_datatype(graphs_train + [graph_to_be_interpret], inplace=True)
     kernel = GraphKernelConfig(hyperdict=json.load(open(mgk_hyperparameters_file))).kernel
     # normalize_y must be false.
-    gpr = GPR(kernel=kernel, alpha=alpha, normalize_y=False).fit(graphs_train, targets_train)
+    gpr = GaussianProcessRegressor(kernel=kernel, alpha=alpha, normalize_y=False).fit(graphs_train, targets_train)
     y_pred, y_std = gpr.predict([graph_to_be_interpret], return_std=True)
     y_nodes = gpr.predict_nodal([graph_to_be_interpret])
     for i, atom in enumerate(mol.GetAtoms()):
@@ -211,7 +222,7 @@ def get_interpreted_mols(smiles_train: List[str],
     graphs = [HashGraph.from_rdkit(mol) for mol in mols_train]
     HashGraph.unify_datatype(graphs, inplace=True)
     kernel = GraphKernelConfig(hyperdict=json.load(open(mgk_hyperparameters_file))).kernel
-    gpr = GPR(kernel=kernel, alpha=alpha, normalize_y=False).fit(graphs, targets_train)
+    gpr = GaussianProcessRegressor(kernel=kernel, alpha=alpha, normalize_y=False).fit(graphs, targets_train)
     mols_to_be_interpret = [Chem.MolFromSmiles(s) for s in smiles_to_be_interpret]
     graphs_to_be_interpret = [HashGraph.from_rdkit(mol) for mol in mols_to_be_interpret]
     HashGraph.unify_datatype(graphs + graphs_to_be_interpret, inplace=True)

@@ -1,23 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
+from typing import Literal
 import numpy as np
 import copy
 import threading
 from joblib import Parallel, delayed
-from ...models.regression.GPRgraphdot import GPR as GPRgraphdot
-from ...models.regression.GPRsklearn.gpr import GPR as GPRsklearn
-from sklearn.ensemble._forest import RandomForestRegressor
+from mgktools.models.regression.gpr.gpr import GaussianProcessRegressor as GPRgraphdot
 
 
 def _parallel_build_models(model, models, X, y, model_idx, n_models,
                            verbose=0):
     """
-    Private function used to fit a consensus model in parallel."""
+    Private function used to fit a ensemble model in parallel."""
     if verbose > 1:
         print("building model %d of %d" % (model_idx + 1, n_models))
     np.random.seed(model_idx)
-    idx = np.random.choice(np.arange(len(X)), models.n_sample_per_model,
+    idx = np.random.choice(np.arange(len(X)), models.n_samples_per_model,
                            replace=False)
     if X.ndim == 1:
         model.fit(X[idx], y[idx])
@@ -48,20 +46,20 @@ def _accumulate_prediction(predict, X, out, out_u, lock, return_std=False):
             out.append(prediction)
 
 
-class ConsensusRegressor:
+class EnsembleRegressor:
     def __init__(self, model,
                  n_estimators: int = 100,
-                 n_sample_per_model: int = 2000,
+                 n_samples_per_model: int = 2000,
                  n_jobs: int = 1, verbose=0,
-                 consensus_rule: Literal['smallest_uncertainty', 'weight_uncertainty', 'mean'] = 'smallest_uncertainty'
+                 ensemble_rule: Literal['smallest_uncertainty', 'weight_uncertainty', 'mean'] = 'smallest_uncertainty'
                  ):
         self.model = model
         self.models = []
         self.n_estimators = n_estimators
-        self.n_sample_per_model = n_sample_per_model
+        self.n_samples_per_model = n_samples_per_model
         self.n_jobs = n_jobs
         self.verbose = verbose
-        self.consensus_rule = consensus_rule
+        self.ensemble_rule = ensemble_rule
         assert (n_estimators > 0)
 
     def fit(self, X, y):
@@ -79,7 +77,7 @@ class ConsensusRegressor:
         else:
             raise RuntimeError(
                 f'The regressor {self.model} are not supported for '
-                f'ConsensusRegressor yet'
+                f'EnsembleRegressor yet'
             )
 
     def predict_gpr(self, X, return_std=False):
@@ -92,7 +90,7 @@ class ConsensusRegressor:
                                             return_std=return_std)
             for m in self.models)
         y, u = self.majority_vote(np.asarray(y_hat), np.asarray(u_hat),
-                                  self.consensus_rule)
+                                  self.ensemble_rule)
         y_hat = y
         u_hat = u
         if return_std:
@@ -113,7 +111,7 @@ class ConsensusRegressor:
             return y.mean(axis=0), u.mean(axis=0)
         else:
             raise RuntimeError(
-                f'Unknown predict_rule for ConsensusRegressor{rule}'
+                f'Unknown predict_rule for EnsembleRegressor{rule}'
             )
 
     def save(self, path, overwrite=False):

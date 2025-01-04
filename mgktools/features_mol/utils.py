@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from typing import Callable, List, Union
+from typing import List, Union
 import csv
 import os
 import pickle
-from typing import List
 import numpy as np
 from joblib import Parallel, delayed
 from rdkit import Chem
-from .features_generators import FeaturesGenerator
+from mgktools.features_mol.features_generators import FeaturesGenerator
 
 
 def save_features(path: str, features: List[np.ndarray]) -> None:

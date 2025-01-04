@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from typing import Callable, List, Union
+from typing import Union
 import math
 import numpy as np
-from rdkit import Chem, DataStructs
+from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors
 from rdkit.Avalon.pyAvalonTools import GetAvalonFP, GetAvalonCountFP
 from descriptastorus.descriptors import rdDescriptors, rdNormalizedDescriptors
 
 
-AVAILABLE_FEATURES_GENERATORS = ['morgan', 'morgan_count', 'circular', 'rdkit_208', 'rdkit_2d', 'rdkit_2d_normalized', 'rdkit_topol', 'layered', 'torsion', 'atom_pair', 'avalon', 'avalon_count', 'maccskey', 'pattern']
+AVAILABLE_FEATURES_GENERATORS = ['morgan', 'morgan_count', 'rdkit_208', 'rdkit_2d', 'rdkit_2d_normalized', 'rdkit_topol', 'layered', 'torsion', 'atom_pair', 'avalon', 'avalon_count', 'maccskey', 'pattern']
 
 
 class FeaturesGenerator:
@@ -21,11 +21,7 @@ class FeaturesGenerator:
         self.radius = radius
         self.num_bits = num_bits
         self.atomInvariantsGenerator = atomInvariantsGenerator
-        if features_generator_name == 'circular':
-            import deepchem
-            self.generator = deepchem.feat.CircularFingerprint(radius=radius, size=num_bits, 
-                                                               sparse=False, smiles=True)
-        elif features_generator_name == 'rdkit_2d':
+        if features_generator_name == 'rdkit_2d':
             self.generator = rdDescriptors.RDKit2D()
         elif features_generator_name == 'rdkit_2d_normalized':
             self.generator = rdNormalizedDescriptors.RDKit2DNormalized()
@@ -37,14 +33,12 @@ class FeaturesGenerator:
             return self.morgan_binary_features_generator(mol)
         elif self.features_generator_name == 'morgan_count':
             return self.morgan_counts_features_generator(mol)
-        elif self.features_generator_name == 'circular':
-            return self.circular_features_generator(mol)
-        elif self.features_generator_name == 'rdkit_208':
-            return self.rdkit_208_features_generator(mol)
         elif self.features_generator_name == 'rdkit_2d':
             return self.rdkit_2d_features_generator(mol)
         elif self.features_generator_name == 'rdkit_2d_normalized':
             return self.rdkit_2d_normalized_features_generator(mol)
+        elif self.features_generator_name == 'rdkit_208':
+            return self.rdkit_208_features_generator(mol)
         elif self.features_generator_name == 'rdkit_topol':
             return self.rdkit_topological_features_generator(mol)
         elif self.features_generator_name == 'layered':
@@ -97,10 +91,6 @@ class FeaturesGenerator:
             generator = AllChem.GetMorganGenerator(radius=self.radius, fpSize=self.num_bits)
         mol = Chem.MolFromSmiles(mol) if isinstance(mol, str) else mol
         return np.array(generator.GetCountFingerprint(mol).ToList())
-
-    def circular_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
-        features = self.generator.featurize([mol]).ravel()
-        return features
 
     def rdkit_2d_features_generator(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
         """

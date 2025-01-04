@@ -1,64 +1,75 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
-from .regression import GPR, ConsensusRegressor, LRAGPR, NLEGPR, SVR
-from .classification import GPC, SVC
-from ..kernels.PreComputed import PreComputedKernel
+from typing import Literal
+from mgktools.models.regression.gpr.gpr import GaussianProcessRegressor
+from graphdot.model.gaussian_process.nystrom import LowRankApproximateGPR
+from mgktools.models.regression.scalable.NLE import NaiveLocalExpertGP
+from mgktools.models.regression.consensus import EnsembleRegressor
+from sklearn.svm import SVR
+from mgktools.models.classification.gpc.gpc import GaussianProcessClassifier
+from mgktools.models.classification.svm.svm import SVMClassifier
 
 
-def set_model(model_type: Literal['gpr', 'gpr-sod', 'gpr-nystrom', 'gpr-nle', 'svr', 'gpc', 'svc'],
+def set_model(model_type: Literal['gpr', 'gpr-nystrom', 'gpr-nle', 'svr', 'gpc', 'svc'],
               kernel,
+              graph_kernel_type: Literal['graph', 'precomputed', 'no'] = None,
               # gpr
+              optimizer = None,
               alpha: float = None,
               # svm
               C: float = None,
               # sod
               n_estimators: int = None,
-              n_samples: int = None,
-              consensus_rule: Literal['smallest_uncertainty', 'weight_uncertainty', 'mean'] = 'weight_uncertainty',
-              # nystrom
+              n_samples_per_model: int = None,
+              ensemble_rule: Literal['smallest_uncertainty', 'weight_uncertainty', 'mean'] = 'weight_uncertainty',
               n_jobs: int = 1):
-    if model_type in ['gpr', 'gpr-sod', 'gpr-nystrom', 'gpr-nle']:
+    if model_type == 'gpr':
         assert alpha is not None
-        gpr = GPR(kernel=kernel,
-                  optimizer=None,
-                  alpha=alpha,
-                  normalize_y=True)
-        if model_type == 'gpr':
-            return gpr
-        elif model_type == 'gpr-sod':
-            assert n_samples is not None
-            return ConsensusRegressor(
-                gpr,
+        model = GaussianProcessRegressor(
+            kernel=kernel,
+            optimizer=optimizer,
+            alpha=alpha,
+            normalize_y=False,
+        )
+        if n_estimators is not None and n_estimators > 1:
+            return EnsembleRegressor(
+                model,
                 n_estimators=n_estimators,
-                n_sample_per_model=n_samples,
+                n_samples_per_model=n_samples_per_model,
                 n_jobs=n_jobs,
-                consensus_rule=consensus_rule
+                ensemble_rule=ensemble_rule
             )
-        elif model_type == 'gpr-nystrom':
-            return LRAGPR(kernel=kernel,
-                          optimizer=None,
-                          alpha=alpha,
-                          normalize_y=True)
-        elif model_type == 'gpr-nle':
-            if kernel.__class__ != PreComputedKernel:
-                assert n_jobs == 1
-            return NLEGPR(kernel=kernel,
-                          alpha=alpha,
-                          n_local=n_samples,
-                          n_jobs=n_jobs)  # must be 1 for mgk. could be larger for pre-computed kernel.)
+    elif model_type == 'gpr-nystrom':
+        assert alpha is not None
+        model = LowRankApproximateGPR(
+            kernel=kernel,
+            optimizer=optimizer,
+            alpha=alpha,
+            normalize_y=True,
+        )
+    elif model_type == 'gpr-nle':
+        assert alpha is not None
+        n_jobs = 1 if graph_kernel_type == 'graph' else n_jobs
+        model = NaiveLocalExpertGP(
+            kernel=kernel,
+            alpha=alpha,
+            n_local=n_samples_per_model,
+            n_jobs=n_jobs
+        )
     elif model_type == 'svr':
         assert C is not None
-        return SVR(kernel=kernel,
-                   C=C)
+        model = SVR(kernel=kernel, C=C)
     elif model_type == 'gpc':
-        return GPC(kernel=kernel,
-                   optimizer=None,
-                   n_jobs=n_jobs)
+        model = GaussianProcessClassifier(
+            kernel=kernel,
+            optimizer=optimizer,
+            n_jobs=n_jobs
+        )
     elif model_type == 'svc':
         assert C is not None
-        return SVC(kernel=kernel,
-                   C=C,
-                   probability=True)
+        model = SVMClassifier(
+            kernel=kernel,
+            C=C,
+            probability=True
+        )
     else:
         raise RuntimeError(f'unsupported model_type: {model_type}')
+    return model

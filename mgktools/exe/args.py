@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os
 from tap import Tap
-from typing import Dict, Iterator, List, Optional, Union, Literal, Tuple
-import numpy as np
+from typing import List, Literal, Tuple, Optional
+import os
 from mgktools.evaluators.metric import Metric
+from mgktools.features_mol.features_generators import FeaturesGenerator
 
 
 class CommonArgs(Tap):
@@ -14,83 +14,46 @@ class CommonArgs(Tap):
     """The cpu numbers used for parallel computing."""
     data_path: str = None
     """The Path of input data CSV file."""
-    pure_columns: List[str] = None
+    smiles_columns: List[str] = None
     """
-    For pure compounds.
-    Name of the columns containing single SMILES or InChI string.
+    Name of the columns containing single SMILES string.
     """
-    mixture_columns: List[str] = None
-    """
-    For mixtures.
-    Name of the columns containing multiple SMILES or InChI string and 
-    corresponding concentration.
-    example: ["C", 0.5, "CC", 0.3]
-    """
-    mixture_type: Literal["single_graph", "multi_graph"] = "single_graph"
-    """How the mixture is represented."""
-    reaction_columns: List[str] = None
-    """
-    For chemical reactions.
-    Name of the columns containing single reaction smarts string.
-    """
-    reaction_type: Literal["reaction", "agent", "reaction+agent"] = "reaction"
-    """How the chemical reaction is represented."""
-    feature_columns: List[str] = None
+    features_columns: List[str] = None
     """
     Name of the columns containing additional features_mol such as temperature, 
     pressuer.
     """
-    features_generator: List[str] = None
+    features_generators_name: List[str] = None
     """Method(s) of generating additional features_mol."""
     features_combination: Literal["concat", "mean"] = None
     """How to combine features vector for mixtures."""
-    target_columns: List[str] = None
+    targets_columns: List[str] = None
     """
-    Name of the columns containing target values.
+    Name of the columns containing target values. Multi-targets are not implemented yet.
     """
     features_mol_normalize: bool = False
     """Nomralize the molecular features_mol."""
     features_add_normalize: bool = False
     """Nomralize the additonal features_mol."""
-    group_reading: bool = False
-    """Find unique input strings first, then read the data."""
     def __init__(self, *args, **kwargs):
         super(CommonArgs, self).__init__(*args, **kwargs)
 
     @property
-    def graph_columns(self) -> List[str]:
-        graph_columns = []
-        if self.pure_columns is not None:
-            graph_columns += self.pure_columns
-        if self.mixture_columns is not None:
-            graph_columns += self.mixture_columns
-        if self.reaction_columns is not None:
-            graph_columns += self.reaction_columns
-        return graph_columns
-
-    def update_columns(self, keys: List[str]):
-        """Add all undefined columns to target_columns"""
-        if self.target_columns is not None:
-            return
+    def features_generators(self) -> Optional[List[FeaturesGenerator]]:
+        if self.features_generators_name is None:
+            return None
         else:
-            used_columns = self.graph_columns
-            if self.feature_columns is not None:
-                used_columns += self.feature_columns
-            for key in used_columns:
-                keys.remove(key)
-            self.target_columns = keys
+            return [FeaturesGenerator(features_generator_name=fg) for fg in self.features_generators_name]
 
     def process_args(self) -> None:
         if not os.path.exists(self.save_dir):
             os.mkdir(self.save_dir)
-
-        if self.group_reading:
-            if self.feature_columns is None:
-                raise ValueError("feature_columns must be assigned when using group_reading.")
+        if self.features_generators_name is not None and self.features_combination is None:
+            self.features_combination = "concat"
 
 
 class KArgs(Tap):
-    graph_kernel_type: Literal["graph", "pre-computed"] = None
+    graph_kernel_type: Literal["graph", "pre-computed", "no"]
     """The type of kernel to use."""
     graph_hyperparameters: List[str] = None
     """hyperparameters file for graph kernel."""
@@ -128,43 +91,22 @@ class KArgs(Tap):
 
 
 class KernelArgs(CommonArgs, KArgs):
-    augment_data: bool = False
-    """If True, the dataset will be augmented by shuffling the order of the equivalent columns of the data."""
-
     def process_args(self) -> None:
         super().process_args()
 
 
-class TrainArgs(KernelArgs):
-    task_type: Literal["regression", "binary", "multi-class"] = None
-    """
-    Type of task.
-    """
-    model_type: Literal["gpr", "svc", "svr", "gpc", "gpr_nystrom", "gpr_nle"]
-    """Type of model to use"""
-    loss: Literal["loocv", "likelihood"] = "loocv"
-    """The target loss function to minimize or maximize."""
-    cross_validation: Literal["n-fold", "leave-one-out", "Monte-Carlo"] = "Monte-Carlo"
-    """The way to split data for cross-validation."""
-    nfold: int = None
-    """The number of fold for n-fold CV."""
-    split_type: Literal["random", "scaffold_order", "scaffold_random", "stratified"] = None
-    """Method of splitting the data into train/test sets."""
-    split_sizes: List[float] = None
-    """Split proportions for train/test sets."""
-    num_folds: int = 1
-    """Number of folds when performing cross validation."""
+class ModelArgs(Tap):
+    model_type: Literal["gpr", "svc", "svr", "gpc", "gpr-nystrom", "gpr-nle"]
+    """The machine learning model to use."""
     alpha: str = None
     """data noise used in gpr."""
     C: str = None
     """C parameter used in Support Vector Machine."""
-    seed: int = 0
-    """Random seed."""
     ensemble: bool = False
     """use ensemble model."""
-    n_estimator: int = 1
+    n_estimators: int = 1
     """Ensemble model with n estimators."""
-    n_sample_per_model: int = None
+    n_samples_per_model: int = None
     """The number of samples use in each estimator."""
     ensemble_rule: Literal["smallest_uncertainty", "weight_uncertainty",
                            "mean"] = "weight_uncertainty"
@@ -173,22 +115,37 @@ class TrainArgs(KernelArgs):
     """The number of samples used in Naive Local Experts."""
     n_core: int = None
     """The number of samples used in Nystrom core set."""
+
+
+class TrainArgs(KernelArgs, ModelArgs):
+    task_type: Literal["regression", "binary", "multi-class"] = None
+    """Type of task."""
+    cross_validation: Literal["kFold", "leave-one-out", "Monte-Carlo", "no"] = "Monte-Carlo"
+    """The way to split data for cross-validation."""
+    n_splits: int = None
+    """The number of fold for kFold CV."""
+    split_type: Literal["random", "scaffold_order", "scaffold_random", "stratified"] = None
+    """Method of splitting the data into train/test sets."""
+    split_sizes: List[float] = None
+    """Split proportions for train/test sets."""
+    num_folds: int = 1
+    """Number of folds when performing cross validation."""
+    seed: int = 0
+    """Random seed."""
     metric: Metric = None
     """metric"""
     extra_metrics: List[Metric] = []
     """Metrics"""
-    no_proba: bool = False
-    """Use predict_proba for classification task."""
     evaluate_train: bool = False
     """If set True, evaluate the model on training set."""
-    detail: bool = False
-    """If set True, 5 most similar molecules in the training set will be save in the test_*.log."""
-    save_model: bool = False
-    """Save the trained model file."""
+    n_similar: int = None
+    """The number of most similar molecules in the training set will be saved."""
     separate_test_path: str = None
     """Path to separate test set, optional."""
     atomic_attribution: bool = False
-    """Output interpretability."""
+    """Output interpretable results on atomic attribution."""
+    molecular_attribution: bool = False
+    """Output interpretable results on molecular attribution."""
 
     @property
     def metrics(self) -> List[Metric]:
@@ -222,40 +179,28 @@ class TrainArgs(KernelArgs):
     def process_args(self) -> None:
         super().process_args()
         if self.task_type == "regression":
-            assert self.model_type in ["gpr", "gpr_nystrom", "gpr_nle", "svr"]
+            assert self.model_type in ["gpr", "gpr-nystrom", "gpr-nle", "svr"]
             for metric in self.metrics:
                 assert metric in ["rmse", "mae", "mse", "r2", "max"]
         elif self.task_type == "binary":
             assert self.model_type in ["gpc", "svc", "gpr"]
             for metric in self.metrics:
-                assert metric in ["roc-auc", "accuracy", "precision", "recall", "f1_score", "mcc"]
+                assert metric in ["roc_auc", "accuracy", "precision", "recall", "f1_score", "mcc"]
         elif self.task_type == "multi-class":
-            assert self.model_type in ["gpc", "svc"]
-            for metric in self.metrics:
-                assert metric in ["accuracy", "precision", "recall", "f1_score"]
+            raise NotImplementedError("Multi-class classification is not implemented yet.")
 
         if self.cross_validation == "leave-one-out":
             assert self.num_folds == 1
             assert self.model_type == "gpr"
 
-        if self.model_type in ["gpr", "gpr_nystrom"]:
+        if self.model_type in ["gpr", "gpr-nystrom"]:
             assert self.alpha is not None
 
         if self.model_type == "svc":
             assert self.C is not None
 
-        if not hasattr(self, "optimizer"):
-            self.optimizer = None
-        if not hasattr(self, "batch_size"):
-            self.batch_size = None
-
-        if self.save_model:
-            assert self.num_folds == 1
-            assert self.split_sizes[0] > 0.99999
-            assert self.model_type == "gpr"
-
         if self.ensemble:
-            assert self.n_sample_per_model is not None
+            assert self.n_samples_per_model is not None
 
         if self.atomic_attribution:
             assert self.graph_kernel_type == "graph", "Set graph_kernel_type to graph for interpretability"
@@ -264,15 +209,16 @@ class TrainArgs(KernelArgs):
 
 
 class GradientOptArgs(TrainArgs):
-    optimizer: Literal["SLSQP", "L-BFGS-B", "BFGS", "fmin_l_bfgs_b", "sgd", "rmsprop", "adam"] = None
-    """Optimizer"""
+    loss: Literal["loocv", "likelihood"] = "loocv"
+    """The target loss function to minimize or maximize."""
+    optimizer: str = None
+    """Optimizer implemented in scipy.optimize.minimize are valid: L-BFGS-B, SLSQP, Nelder-Mead, Newton-CG, etc."""
 
     def process_args(self) -> None:
-        super().process_args()
         assert self.model_type == "gpr"
 
 
-class HyperoptArgs(TrainArgs):
+class OptunaArgs(TrainArgs):
     num_iters: int = 100
     """Number of hyperparameter choices to try."""
     alpha_bounds: Tuple[float, float] = None
@@ -283,110 +229,42 @@ class HyperoptArgs(TrainArgs):
     """Bounds of C used in SVC."""
     d_C: float = None
     """The step size of C to be optimized."""
-    batch_size: int = None
-    """batch_size"""
     num_splits: int = 1
-    """split the dataset randomly into no. subsets."""
-    save_all: bool = False
-    """save all hyperparameters during bayesian optimization."""
-
-    @property
-    def minimize_score(self) -> bool:
-        """Whether the model should try to minimize the score metric or maximize it."""
-        return self.metric in {"rmse", "mae", "mse", "r2"}
-
-    @property
-    def opt_alpha(self) -> bool:
-        if self.alpha_bounds is not None and \
-                self.model_type in ["gpr", "gpr_nystrom"]:
-            return True
-        else:
-            return False
-
-    @property
-    def opt_C(self) -> bool:
-        if self.C_bounds is not None and \
-                self.model_type == "svc":
-            return True
-        else:
-            return False
+    """split the dataset randomly into no. subsets to reduce computational costs."""
 
     def process_args(self) -> None:
         super().process_args()
-        if self.optimizer in ["L-BFGS-B"]:
-            assert self.model_type == "gpr"
 
 
-class EmbeddingArgs(KernelArgs):
-    embedding_algorithm: Literal["tSNE", "kPCA"] = "tSNE"
-    """Algorithm for data embedding."""
-    n_components: int = 2
-    """Dimension of the embedded space."""
-    perplexity: float = 30.0
-    """
-    The perplexity is related to the number of nearest neighbors that
-    is used in other manifold learning algorithms. Larger datasets
-    usually require a larger perplexity. Consider selecting a value
-    different results.
-    """
-    n_iter: int = 1000
-    """Maximum number of iterations for the optimization. Should be at least 250."""
-    save_png: bool = False
-    """If True, save the png file of the data embedding."""
-
-    def process_args(self) -> None:
-        super().process_args()
-        if self.save_png:
-            assert self.n_components == 2
-
-
-class HyperoptMultiDatasetArgs(KArgs):
+class OptunaMultiDatasetArgs(KArgs):
     save_dir: str
     """The output directory."""
     n_jobs: int = 1
     """The cpu numbers used for parallel computing."""
     data_paths: List[str]
-    """The Path of input data CSV file."""
-    pure_columns: str = None
+    """The Path of input data CSV files."""
+    smiles_columns: str = None
     """
-    For pure compounds.
-    Name of the columns containing single SMILES or InChI string.
+    Name of the columns containing single SMILES string.
+    E.g.: "smiles;smiles;smiles1,smiles2"
     """
-    mixture_columns: str = None
-    """
-    For mixtures.
-    Name of the columns containing multiple SMILES or InChI string and 
-    corresponding concentration.
-    example: ["C", 0.5, "CC", 0.3]
-    """
-    mixture_type: Literal["single_graph", "multi_graph"] = "single_graph"
-    """How the mixture is represented."""
-    reaction_columns: str = None
-    """
-    For chemical reactions.
-    Name of the columns containing single reaction smarts string.
-    """
-    reaction_type: Literal["reaction", "agent", "reaction+agent"] = "reaction"
-    """How the chemical reaction is represented."""
-    feature_columns: str = None
+    features_columns: str = None
     """
     Name of the columns containing additional features_mol such as temperature, 
     pressuer.
     """
-    features_generator: List[str] = None
-    """Method(s) of generating additional features_mol."""
-    features_combination: Literal["concat", "mean"] = None
-    """How to combine features vector for mixtures."""
-    target_columns: str = None
+    targets_columns: str = None
     """
     Name of the columns containing target values.
     """
+    features_generators_name: List[str] = None
+    """Method(s) of generating additional features_mol."""
+    features_combination: Literal["concat", "mean"] = None
+    """How to combine features vector for mixtures."""
     features_mol_normalize: bool = False
     """Nomralize the molecular features_mol."""
     features_add_normalize: bool = False
     """Nomralize the additonal features_mol."""
-    group_reading: bool = False
-    """Find unique input strings first, then read the data."""
     tasks_type: List[Literal["regression", "binary", "multi-class"]]
     """
     Type of task.
@@ -405,6 +283,13 @@ class HyperoptMultiDatasetArgs(KArgs):
     """Random seed."""
 
     @property
+    def features_generators(self) -> Optional[List[FeaturesGenerator]]:
+        if self.features_generators_name is None:
+            return None
+        else:
+            return [FeaturesGenerator(features_generator_name=fg) for fg in self.features_generators_name]
+
+    @property
     def alpha_(self) -> float:
         if self.alpha is None:
             return None
@@ -414,41 +299,31 @@ class HyperoptMultiDatasetArgs(KArgs):
             return float(open(self.alpha, "r").read())
         else:
             return float(self.alpha)
-        
-    @property
-    def graph_columns(self) -> List[str]:
-        graph_columns = []
-        if self.pure_columns is not None:
-            graph_columns += self.pure_columns
-        if self.mixture_columns is not None:
-            graph_columns += self.mixture_columns
-        if self.reaction_columns is not None:
-            graph_columns += self.reaction_columns
-        return graph_columns
-
-    def update_columns(self, keys: List[str]):
-        """Add all undefined columns to target_columns"""
-        if self.target_columns is not None:
-            return
-        else:
-            used_columns = self.graph_columns
-            if self.feature_columns is not None:
-                used_columns += self.feature_columns
-            for key in used_columns:
-                keys.remove(key)
-            self.target_columns = keys
 
     def process_args(self) -> None:
         if not os.path.exists(self.save_dir):
             os.mkdir(self.save_dir)
 
         none_list = [None] * len(self.data_paths)
-        self.pure_columns_ = [i.split(",") for i in self.pure_columns.split(";")] if self.pure_columns is not None else none_list
-        self.mixture_columns_ = [i.split(",") for i in self.mixture_columns.split(";")] if self.mixture_columns is not None else none_list
-        self.reaction_columns_ = [i.split(",") for i in self.reaction_columns.split(";")] if self.reaction_columns is not None else none_list
-        self.feature_columns_ = [i.split(",") for i in self.feature_columns.split(";")] if self.feature_columns is not None else none_list
-        self.target_columns_ = [i.split(",") for i in self.target_columns.split(";")]
+        self.smiles_columns_ = [i.split(",") for i in self.smiles_columns.split(";")]
+        self.features_columns_ = [None if i == '' else i.split(",") for i in self.features_columns.split(";")] if self.features_columns is not None else none_list
+        self.targets_columns_ = [i.split(",") for i in self.targets_columns.split(";")]
 
-        if self.group_reading:
-            if self.feature_columns is None:
-                raise ValueError("feature_columns must be assigned when using group_reading.")
+
+class EmbeddingArgs(KernelArgs):
+    embedding_algorithm: Literal["tSNE", "kPCA"] = "tSNE"
+    """Algorithm for data embedding."""
+    n_components: int = 2
+    """Dimension of the embedded space."""
+    perplexity: float = 30.0
+    """
+    The perplexity is related to the number of nearest neighbors that
+    is used in other manifold learning algorithms. Larger datasets
+    usually require a larger perplexity. Consider selecting a value
+    different results.
+    """
+    n_iter: int = 1000
+    """Maximum number of iterations for the optimization. Should be at least 250."""
+
+    def process_args(self) -> None:
+        super().process_args()

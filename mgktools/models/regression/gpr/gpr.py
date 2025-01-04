@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import pickle
-import math
 from graphdot.model.gaussian_process.nystrom import *
-from graphdot.model.gaussian_process.gpr import GaussianProcessRegressor
-from .sgd import *
+from graphdot.model.gaussian_process.gpr import GaussianProcessRegressor as GPR
 
 
-class GPR(GaussianProcessRegressor):
+class GaussianProcessRegressor(GPR):
     def predict(self, Z, return_std=False, return_cov=False):
         """Predict using the trained GPR model.
 
@@ -87,3 +84,20 @@ class GPR(GaussianProcessRegressor):
             return ymean, std
         else:
             return ymean
+
+    def predict_interpretable(self, Z):
+        assert self.normalize_y is False, "y normalization must be False for molecular attribution."
+        if not hasattr(self, 'Kinv'):
+            raise RuntimeError('Model not trained.')
+        Ks = self._gramian(None, Z, self.X)
+        Linv = np.linalg.inv(self.Kinv.L)
+        K_left = Ks @ Linv.T @ Linv
+        return K_left, np.einsum('ij,j->ij', Ks @ Linv.T @ Linv, self.y * self._ystd + self._ymean)
+
+    def predict_nodal(self, Z):
+        assert self.normalize_y is False, "y normalization must be False for atomic attribution."
+        if not hasattr(self, 'Kinv'):
+            raise RuntimeError('Model not trained.')
+        Ks = self.kernel(Z, self.X, nodal_X=True)
+        ymean = (Ks @ self.Ky) * self._ystd + self._ymean
+        return ymean
