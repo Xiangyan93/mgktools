@@ -101,6 +101,7 @@ def interpret_training_mols(smiles_to_be_interpret: List[str],
     full.create_graphs(n_jobs=n_jobs)
     if features_generators is not None:
         full.create_features_mol(n_jobs=n_jobs)
+    full.unify_datatype()
     kernel_config = get_kernel_config(
         train,
         graph_kernel_type=graph_kernel_type,
