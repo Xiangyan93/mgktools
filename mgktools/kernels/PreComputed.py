@@ -110,7 +110,7 @@ def calc_precomputed_kernel_config(
         assert N_MGK == dataset.N_MGK, f"{N_MGK}, {dataset.N_MGK}"
         if dataset.N_features_mol == dataset.N_features_add == 0:
             # multiple graph kernels, no feature kernel.
-            assert N_MGK == len(kernel_config.kernel_configs)
+            assert N_MGK == len(kernel_config.kernel_configs), f"{N_MGK} != {len(kernel_config.kernel_configs)}"
             precomputed_kernel_configs = []
             for i in range(N_MGK):
                 kc = kernel_config.kernel_configs[i]

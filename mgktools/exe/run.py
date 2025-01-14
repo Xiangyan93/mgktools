@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import KernelPCA
-from mgktools.data.data import Dataset
+from mgktools.data.data import CachedDict, Dataset
 from mgktools.kernels.utils import get_kernel_config
 from mgktools.kernels.PreComputed import calc_precomputed_kernel_config
 from mgktools.evaluators.cross_validation import Evaluator
@@ -17,6 +17,7 @@ from mgktools.hyperparameters.optuna import (
     bayesian_optimization_gpr_multi_datasets as optuna_bayesian_optimization_gpr_multi_datasets,
 )
 from mgktools.exe.args import (
+    CacheArgs,
     CommonArgs,
     KernelArgs,
     TrainArgs,
@@ -25,79 +26,85 @@ from mgktools.exe.args import (
     OptunaMultiDatasetArgs,
     EmbeddingArgs,
 )
-from mgktools.exe.model import set_model_from_args
+from mgktools.exe.model import set_model_from_args, set_model
 
 
-def mgk_read_data(arguments=None):
-    args = CommonArgs().parse_args(arguments)
-    print("Reading the datasets and saving them in pickle files.")
-    if args.data_path is not None:
-        dataset = Dataset.from_df(
-            df=pd.read_csv(args.data_path),
-            smiles_columns=args.smiles_columns,
-            features_columns=args.features_columns,
-            targets_columns=args.targets_columns,
-            n_jobs=args.n_jobs,
-        )
-        dataset.set_status(graph_kernel_type='graph',
-                           features_generators=args.features_generators, 
-                           features_combination=args.features_combination)
-        print("Creating graph objects.")
-        dataset.create_graphs(n_jobs=args.n_jobs)
-        if args.features_generators is not None:
-            print("Creating molecular descriptors.")
-            dataset.create_features_mol(n_jobs=args.n_jobs)
-    else:
-        raise ValueError("Please provide data_path.")
-    if args.features_mol_normalize:
-        dataset.normalize_features_mol()
-    if args.features_add_normalize:
-        dataset.normalize_features_add()
-    dataset.save(args.save_dir, overwrite=True)
-    print("Reading Datasets Finished.")
+def mgk_cache_data(arguments=None):
+    args = CacheArgs().parse_args(arguments)
+    smiles_list = []
+    for data_path in args.data_paths:
+        df = pd.read_csv(data_path)
+        for smiles_column in args.smiles_columns:
+            if smiles_column in df:
+                smiles_list += df[smiles_column].tolist()
+    smiles_list = np.unique(smiles_list).tolist()
+    cache = CachedDict()
+    if args.cache_graph:
+        print("**\tCreating GraphDot graph objects.\t**")
+        cache = CachedDict()
+        cache.cache_graphs(smiles_list, n_jobs=args.n_jobs)
+    if args.features_generators is not None:
+        print("**\tCreating molecular descriptors.\t**")
+        cache.cache_features(smiles_list, features_generators=args.features_generators, n_jobs=args.n_jobs)
+    print(f"**\tSaving cache file: {args.cache_path}.\t**")
+    cache.save(filename=args.cache_path, overwrite=True)
 
 
 def mgk_kernel_calc(arguments=None):
     args = KernelArgs().parse_args(arguments)
-    assert args.graph_kernel_type == "graph"
-    assert args.n_jobs == 1
-    # load data set.
-    dataset = Dataset.load(path=args.save_dir)
-    dataset.set_status(graph_kernel_type='graph',
+    assert args.graph_kernel_type == "graph", "Graph kernel must be used for mgk_kernel_calc."
+    # read data set.
+    dataset = Dataset.from_df(
+        df=pd.read_csv(args.data_path),
+        smiles_columns=args.smiles_columns,
+        features_columns=args.features_columns,
+        targets_columns=args.targets_columns,
+        n_jobs=args.n_jobs,
+    )
+    dataset.set_status(graph_kernel_type=args.graph_kernel_type,
                        features_generators=args.features_generators,
                        features_combination=args.features_combination)
+    if args.cache_path is not None:
+        print(f"**\tLoading cache file: {args.cache_path}.\t**")
+        dataset.set_cache(CachedDict.load(filename=args.cache_path))
     dataset.unify_datatype()
     # set kernel_config
     kernel_config = get_kernel_config(
         dataset=dataset,
         graph_kernel_type=args.graph_kernel_type,
-        features_kernel_type=args.features_kernel_type,
-        features_hyperparameters=args.features_hyperparameters,
-        features_hyperparameters_bounds=args.features_hyperparameters_bounds,
-        features_hyperparameters_file=args.features_hyperparameters_file,
         mgk_hyperparameters_files=args.graph_hyperparameters,
+        features_hyperparameters_file=args.features_hyperparameters,
     )
-    print("**\tCalculating kernel matrix\t**")
+    print("**\tCalculating kernel matrix.\t**")
     kernel_config = calc_precomputed_kernel_config(kernel_config=kernel_config, dataset=dataset)
-    print("**\tEnd Calculating kernel matrix\t**")
+    print("**\tEnd Calculating kernel matrix.\t**")
     kernel_pkl = os.path.join(args.save_dir, "kernel.pkl")
     pickle.dump(kernel_config, open(kernel_pkl, "wb"), protocol=4)
 
 
 def mgk_cross_validation(arguments=None):
     args = TrainArgs().parse_args(arguments)
-    dataset = Dataset.load(path=args.save_dir)
+    # read data set.
+    dataset = Dataset.from_df(
+        df=pd.read_csv(args.data_path),
+        smiles_columns=args.smiles_columns,
+        features_columns=args.features_columns,
+        targets_columns=args.targets_columns,
+        n_jobs=args.n_jobs,
+    )
     dataset.set_status(graph_kernel_type=args.graph_kernel_type,
                        features_generators=args.features_generators,
                        features_combination=args.features_combination)
+    if args.cache_path is not None:
+        print(f"**\tLoading cache file: {args.cache_path}.\t**")
+        cache = CachedDict.load(filename=args.cache_path)
+        dataset.set_cache(cache)
+    # set kernel_config
     kernel_config = get_kernel_config(
         dataset=dataset,
         graph_kernel_type=args.graph_kernel_type,
-        features_kernel_type=args.features_kernel_type,
-        features_hyperparameters=args.features_hyperparameters,
-        features_hyperparameters_bounds=args.features_hyperparameters_bounds,
-        features_hyperparameters_file=args.features_hyperparameters_file,
         mgk_hyperparameters_files=args.graph_hyperparameters,
+        features_hyperparameters_file=args.features_hyperparameters,
         kernel_pkl=os.path.join(args.save_dir, "kernel.pkl"),
     )
     model = set_model_from_args(args, kernel=kernel_config.kernel)
@@ -129,14 +136,12 @@ def mgk_cross_validation(arguments=None):
             features_columns=args.features_columns,
             targets_columns=args.targets_columns,
             n_jobs=args.n_jobs,
-            cache=dataset.cache,
         )
         dataset_test.set_status(graph_kernel_type=args.graph_kernel_type,
                                 features_generators=args.features_generators, 
                                 features_combination=args.features_combination)
-        dataset_test.create_graphs(n_jobs=args.n_jobs)
-        if args.features_generators is not None:
-            dataset_test.create_features_mol(n_jobs=args.n_jobs)
+        if args.cache_path is not None:
+            dataset_test.set_cache(cache)
         dataset.unify_datatype(dataset_test.X_graph)
         evaluator.run_external(dataset_test)
     else:
@@ -146,23 +151,34 @@ def mgk_cross_validation(arguments=None):
 
 def mgk_gradientopt(arguments=None):
     args = GradientOptArgs().parse_args(arguments)
-    # read data
-    dataset = Dataset.load(args.save_dir)
+    # read data set.
+    dataset = Dataset.from_df(
+        df=pd.read_csv(args.data_path),
+        smiles_columns=args.smiles_columns,
+        features_columns=args.features_columns,
+        targets_columns=args.targets_columns,
+        n_jobs=args.n_jobs,
+    )
     dataset.set_status(graph_kernel_type=args.graph_kernel_type,
-                       features_generators=args.features_generators, 
+                       features_generators=args.features_generators,
                        features_combination=args.features_combination)
+    if args.cache_path is not None:
+        print(f"**\tLoading cache file: {args.cache_path}.\t**")
+        dataset.set_cache(CachedDict.load(filename=args.cache_path))
     dataset.unify_datatype()
     # set kernel_config
     kernel_config = get_kernel_config(
         dataset=dataset,
         graph_kernel_type=args.graph_kernel_type,
-        features_kernel_type=args.features_kernel_type,
-        features_hyperparameters=args.features_hyperparameters,
-        features_hyperparameters_bounds=args.features_hyperparameters_bounds,
-        features_hyperparameters_file=args.features_hyperparameters_file,
         mgk_hyperparameters_files=args.graph_hyperparameters,
+        features_hyperparameters_file=args.features_hyperparameters,
     )
-    model = set_model_from_args(args, kernel=kernel_config.kernel)
+    model = set_model(
+        model_type="gpr",
+        kernel=kernel_config.kernel,
+        optimizer=args.optimizer,
+        alpha=args.alpha_,
+    )
     model.fit(dataset.X, dataset.y, loss=args.loss, verbose=True)
     kernel_config.update_from_theta()
     kernel_config.update_kernel()
@@ -171,11 +187,20 @@ def mgk_gradientopt(arguments=None):
 
 def mgk_optuna(arguments=None):
     args = OptunaArgs().parse_args(arguments)
-    # read data
-    dataset = Dataset.load(args.save_dir)
+    # read data set.
+    dataset = Dataset.from_df(
+        df=pd.read_csv(args.data_path),
+        smiles_columns=args.smiles_columns,
+        features_columns=args.features_columns,
+        targets_columns=args.targets_columns,
+        n_jobs=args.n_jobs,
+    )
     dataset.set_status(graph_kernel_type=args.graph_kernel_type,
-                       features_generators=args.features_generators, 
+                       features_generators=args.features_generators,
                        features_combination=args.features_combination)
+    if args.cache_path is not None:
+        print(f"**\tLoading cache file: {args.cache_path}.\t**")
+        dataset.set_cache(CachedDict.load(filename=args.cache_path))
     dataset.unify_datatype()
     if args.num_splits == 1:
         datasets = [dataset]
@@ -189,11 +214,8 @@ def mgk_optuna(arguments=None):
     kernel_config = get_kernel_config(
         dataset=dataset,
         graph_kernel_type=args.graph_kernel_type,
-        features_kernel_type=args.features_kernel_type,
-        features_hyperparameters=args.features_hyperparameters,
-        features_hyperparameters_bounds=args.features_hyperparameters_bounds,
-        features_hyperparameters_file=args.features_hyperparameters_file,
         mgk_hyperparameters_files=args.graph_hyperparameters,
+        features_hyperparameters_file=args.features_hyperparameters,
     )
     optuna_bayesian_optimization(
         save_dir=args.save_dir,
@@ -220,33 +242,25 @@ def mgk_optuna(arguments=None):
 
 def mgk_optuna_multi_datasets(arguments=None):
     args = OptunaMultiDatasetArgs().parse_args(arguments)
+    if args.cache_path is not None:
+        print(f"**\tLoading cache file: {args.cache_path}.\t**")
+        cache = CachedDict.load(filename=args.cache_path)
+    else:
+        cache = CachedDict()
     print("Preprocessing Dataset.")
     datasets = []
     for i, data_path in enumerate(args.data_paths):
-        dataset_pkl = f"{args.save_dir}/dataset_{i}.pkl"
-        if os.path.exists(dataset_pkl):
-            dataset = Dataset.load(path=args.save_dir, filename=f"dataset_{i}.pkl")
-        else:
-            dataset = Dataset.from_df(
-                df=pd.read_csv(data_path),
-                smiles_columns=args.smiles_columns_[i],
-                features_columns=args.features_columns_[i],
-                targets_columns=args.targets_columns_[i],
-                n_jobs=args.n_jobs,
-            )
-            dataset.set_status(graph_kernel_type=args.graph_kernel_type,
-                            features_generators=args.features_generators, 
-                            features_combination=args.features_combination)
-            dataset.create_graphs(n_jobs=args.n_jobs)
-            if args.features_generators is not None:
-                dataset.create_features_mol(n_jobs=args.n_jobs)
-            if not os.path.exists(dataset_pkl):
-                dataset.save(
-                    path=args.save_dir, filename=f"dataset_{i}.pkl", overwrite=False
-                )
+        dataset = Dataset.from_df(
+            df=pd.read_csv(data_path),
+            smiles_columns=args.smiles_columns_[i],
+            features_columns=args.features_columns_[i],
+            targets_columns=args.targets_columns_[i],
+            n_jobs=args.n_jobs,
+        )
         dataset.set_status(graph_kernel_type=args.graph_kernel_type,
                            features_generators=args.features_generators, 
                            features_combination=args.features_combination)
+        dataset.set_cache(cache)
         dataset.unify_datatype()
         datasets.append(dataset)
     print("Preprocessing Dataset Finished.")
@@ -254,11 +268,8 @@ def mgk_optuna_multi_datasets(arguments=None):
     kernel_config = get_kernel_config(
         dataset=dataset,
         graph_kernel_type=args.graph_kernel_type,
-        features_kernel_type=args.features_kernel_type,
-        features_hyperparameters=args.features_hyperparameters,
-        features_hyperparameters_bounds=args.features_hyperparameters_bounds,
-        features_hyperparameters_file=args.features_hyperparameters_file,
         mgk_hyperparameters_files=args.graph_hyperparameters,
+        features_hyperparameters_file=args.features_hyperparameters,
     )
     optuna_bayesian_optimization_gpr_multi_datasets(
         save_dir=args.save_dir,
@@ -278,20 +289,27 @@ def mgk_optuna_multi_datasets(arguments=None):
 
 def mgk_embedding(arguments=None):
     args = EmbeddingArgs().parse_args(arguments)
-    dataset = Dataset.load(args.save_dir)
+    # read data set.
+    dataset = Dataset.from_df(
+        df=pd.read_csv(args.data_path),
+        smiles_columns=args.smiles_columns,
+        features_columns=args.features_columns,
+        targets_columns=args.targets_columns,
+        n_jobs=args.n_jobs,
+    )
     dataset.set_status(graph_kernel_type=args.graph_kernel_type,
-                       features_generators=args.features_generators, 
+                       features_generators=args.features_generators,
                        features_combination=args.features_combination)
+    if args.cache_path is not None:
+        print(f"**\tLoading cache file: {args.cache_path}.\t**")
+        dataset.set_cache(CachedDict.load(filename=args.cache_path))
     dataset.unify_datatype()
+    # set kernel_config
     kernel_config = get_kernel_config(
         dataset=dataset,
         graph_kernel_type=args.graph_kernel_type,
-        features_kernel_type=args.features_kernel_type,
-        features_hyperparameters=args.features_hyperparameters,
-        features_hyperparameters_bounds=args.features_hyperparameters_bounds,
-        features_hyperparameters_file=args.features_hyperparameters_file,
         mgk_hyperparameters_files=args.graph_hyperparameters,
-        kernel_pkl=os.path.join(args.save_dir, "kernel.pkl"),
+        features_hyperparameters_file=args.features_hyperparameters,
     )
     if args.embedding_algorithm == "tSNE":
         # compute data embedding.
