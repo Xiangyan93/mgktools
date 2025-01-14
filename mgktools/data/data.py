@@ -66,6 +66,24 @@ class CachedDict:
             )
             self.SMILES_TO_FEATURES.update({f'{smiles}_{fg.features_generator_name}': features for smiles, features in zip(non_cached_smiles, features)})
 
+    def save(self, path=".", filename='cache.pkl', overwrite=False):
+        f_cache = os.path.join(path, filename)
+        if os.path.isfile(f_cache) and not overwrite:
+            raise RuntimeError(
+                f'Path {f_cache} already exists. To overwrite, set '
+                '`overwrite=True`.'
+            )
+        store = self.__dict__.copy()
+        pickle.dump(store, open(f_cache, 'wb'), protocol=4)
+
+    @classmethod
+    def load(cls, path=".", filename='cache.pkl'):
+        f_cache = os.path.join(path, filename)
+        store = pickle.load(open(f_cache, 'rb'))
+        dataset = cls()
+        dataset.__dict__.update(**store)
+        return dataset
+
 
 class Datapoint:
     def __init__(self, smiles_list: List[str],
@@ -115,7 +133,7 @@ class Dataset:
         self.data = data
         self.features_mol_scaler = features_mol_scaler
         self.features_add_scaler = features_add_scaler
-        self.cache = cache or CachedDict() # initialize cache if it is None
+        self.set_cache(cache or CachedDict()) # initialize cache if it is None
 
     def __len__(self) -> int:
         """Return the number of data points in the dataset."""
@@ -251,6 +269,11 @@ class Dataset:
         unique_smiles_list = np.unique(self.X_smiles)
         self.cache.cache_features(unique_smiles_list, self.features_generators, n_jobs=n_jobs)
 
+    def set_cache(self, cache: CachedDict):
+        self.cache = cache
+        for d in self.data:
+            d.cache = cache
+
     def save(self, path, filename='dataset.pkl', overwrite=False):
         f_dataset = os.path.join(path, filename)
         if os.path.isfile(f_dataset) and not overwrite:
@@ -285,6 +308,4 @@ class Dataset:
         data = Parallel(
             n_jobs=n_jobs, verbose=True, prefer='processes')(
             delayed(Datapoint)(I1[i], I2[i], I3[i]) for i in range(len(df)))
-        for d in data:
-            d.cache = cache
         return cls(data=data, cache=cache)

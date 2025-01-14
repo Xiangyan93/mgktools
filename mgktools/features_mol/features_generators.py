@@ -27,8 +27,6 @@ class FeaturesGenerator:
             self.generator = rdNormalizedDescriptors.RDKit2DNormalized()
 
     def __call__(self, mol: Union[str, Chem.Mol]) -> np.ndarray:
-        if self.features_generator_name.__class__ != str:
-            return self.features_generator_name(mol)
         if self.features_generator_name == 'morgan':
             return self.morgan_binary_features_generator(mol)
         elif self.features_generator_name == 'morgan_count':

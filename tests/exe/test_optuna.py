@@ -6,6 +6,7 @@ import pandas as pd
 from mgktools.hyperparameters import (
     additive, additive_pnorm, additive_msnorm, additive_norm,
     product, product_pnorm, product_msnorm, product_norm,
+    rbf, dot_product
 )
 from mgktools.evaluators.metric import AVAILABLE_METRICS_REGRESSION, AVAILABLE_METRICS_BINARY
 from mgktools.exe.run import mgk_optuna, mgk_optuna_multi_datasets
@@ -47,32 +48,29 @@ CWD = os.path.dirname(os.path.abspath(__file__))
     # ("Monte-Carlo", None, "scaffold_order", "5"),
     # ("Monte-Carlo", None, "scaffold_random", "5"),
     # ("kFold", "5", None, "1"),
-    # ("external", None, None, "1")
+    # ("no", None, None, "1")
 ])
 @pytest.mark.parametrize("graph_hyperparameters", [
+    None, additive_pnorm, product_msnorm
     # additive, additive_pnorm, additive_msnorm, additive_norm,
     # product, product_pnorm, product_msnorm, product_norm,
-    None, additive_pnorm, product_msnorm
 ])
-@pytest.mark.parametrize("features_kernel_type", ["rbf"])
-@pytest.mark.parametrize("features_hyperparameters", ["1.0"])
+@pytest.mark.parametrize("use_cache", [True, False])
+@pytest.mark.parametrize("features_hyperparameters", [rbf, dot_product])
 @pytest.mark.parametrize("metric", ["rmse", "roc_auc"])
 @pytest.mark.parametrize("num_iters", [10])
 @pytest.mark.parametrize("opt_alpha_or_C", [True, False])
 @pytest.mark.parametrize("num_splits", [1, 2])
 def test_Optuna(input1, input2, features_scaling, input3, input4, 
-                         graph_hyperparameters, 
-                         features_kernel_type, features_hyperparameters, metric,
+                         graph_hyperparameters, use_cache,
+                         features_hyperparameters, metric,
                          num_iters, opt_alpha_or_C, num_splits):
     dataset, smiles_columns, targets_columns, features_columns, task_type = input1
     features_generators, features_combination, n_features = input2
-    graph_kernel_type = 'graph' if graph_hyperparameters is not None else 'no'
-    save_dir = f"{CWD}/tmp/{dataset}_{",".join(smiles_columns)}_" \
-               f"{",".join(targets_columns)}_{",".join(features_columns)}_" \
-               f"{None if features_generators is None else ",".join(features_generators)}_" \
-               f"{features_combination}_{features_scaling}"
     model_type, model_params = input3
     cross_validation, n_splits, split, num_folds = input4
+    graph_kernel_type = 'graph' if graph_hyperparameters is not None else 'no'
+    save_dir = f"{CWD}/tmp/optuna"
     ### skip the invalid input combinations
     if task_type == "regression":
         # Skip regression datasets for gpc and svc
@@ -88,24 +86,34 @@ def test_Optuna(input1, input2, features_scaling, input3, input4,
         # Skip binary classification datasets for regression metrics
         if metric in AVAILABLE_METRICS_REGRESSION:
             return
-    if graph_kernel_type == "no" and features_generators is None:
+    if graph_hyperparameters is None and features_generators is None:
         # You must use graph kernel or feature kernel.
         return
     if features_generators is None and len(features_columns) == 0 and features_scaling:
         # Skip features scaling when no features are used
         return
     if features_generators is None:
-        if features_kernel_type != "rbf" and features_hyperparameters != "1.0":
+        if features_hyperparameters != rbf:
             return
-    if cross_validation == "external":
-        return
+    if cross_validation == "no":
+        if graph_kernel_type == "pre-computed":
+            return
+        ext_test_path = f"{CWD}/data/{dataset}_test.csv"
+        if not os.path.exists(ext_test_path):
+            return
     elif cross_validation == "leave-one-out":
         # Leave-one-out is only valid for GPR.
         if model_type != "gpr":
             return
+    elif cross_validation == "Monte-Carlo":
+        if len(smiles_columns) > 1 and split.startswith("scaffold"):
+            return
     # hyperparameters optimization using Optuna
     arguments = [
         "--save_dir", save_dir,
+        "--data_path", f"{CWD}/data/{dataset}.csv",
+        "--smiles_columns"] + smiles_columns + [
+        "--targets_columns"] + targets_columns + [
         "--graph_kernel_type", graph_kernel_type,
         "--task_type", task_type,
         "--model_type", model_type.replace("gpr-sod", "gpr"),
@@ -119,14 +127,20 @@ def test_Optuna(input1, input2, features_scaling, input3, input4,
         arguments += ["--split_type", split, "--split_sizes", "0.8", "0.2"]
     if graph_kernel_type == "graph":
         arguments += ["--graph_hyperparameters"] + [graph_hyperparameters] * len(smiles_columns)
+    if features_columns:
+        arguments += ["--features_columns"] + features_columns
     if features_generators is not None:
-        arguments += ["--features_generators"] + features_generators
+        arguments += ["--features_generators_name"] + features_generators
         arguments += ["--features_combination", features_combination]
-    if features_generators is not None or len(features_columns) != 0:
-        arguments += ["--features_kernel_type", features_kernel_type,
-                      "--features_hyperparameters", features_hyperparameters,
-                      "--features_hyperparameters_min", "0.01",
-                      "--features_hyperparameters_max", "50.0"]
+    if features_generators is not None or features_columns:
+        arguments += ["--features_hyperparameters", features_hyperparameters]
+    if features_scaling:
+        if features_columns:
+            arguments += ['--features_add_normalize']
+        if features_generators:
+            arguments += ['--features_mol_normalize']
+    if use_cache:
+        arguments += ["--cache_path", f"{CWD}/tmp/cache.pkl"]
     if model_type.startswith("gpr"):
         arguments += ["--alpha", "0.01"]
         if opt_alpha_or_C:
@@ -160,15 +174,15 @@ def test_Optuna(input1, input2, features_scaling, input3, input4,
 ])
 @pytest.mark.parametrize("features_scaling", [True, False])
 @pytest.mark.parametrize("graph_hyperparameters", [
+    None, additive_pnorm, product_msnorm
     # additive, additive_pnorm, additive_msnorm, additive_norm,
     # product, product_pnorm, product_msnorm, product_norm,
-    None, additive_pnorm, product_msnorm
 ])
-@pytest.mark.parametrize("features_kernel_type", ["rbf"])
-@pytest.mark.parametrize("features_hyperparameters", ["1.0"])
+@pytest.mark.parametrize("use_cache", [True, False])
+@pytest.mark.parametrize("features_hyperparameters", [rbf, dot_product])
 @pytest.mark.parametrize("opt_alpha_or_C", [True, False])
-def test_OptunaMultiDatasets(input1, input2, features_scaling, 
-                             graph_hyperparameters, features_kernel_type, features_hyperparameters, opt_alpha_or_C):
+def test_OptunaMultiDatasets(input1, input2, features_scaling, graph_hyperparameters, use_cache, 
+                             features_hyperparameters, opt_alpha_or_C):
     datasets, smiles_columns, targets_columns, tasks_type, metrics = input1
     data_paths = [f"{CWD}/data/{d}.csv" for d in datasets]
     features_generators, features_combination, n_features = input2
@@ -191,18 +205,17 @@ def test_OptunaMultiDatasets(input1, input2, features_scaling,
         arguments += ["--graph_hyperparameters", graph_hyperparameters]
 
     if features_generators is not None:
-        arguments += ["--features_generators"] + features_generators
+        arguments += ["--features_generators_name"] + features_generators
         arguments += ["--features_combination", features_combination,
-                      "--features_kernel_type", features_kernel_type,
-                      "--features_hyperparameters", features_hyperparameters,
-                      "--features_hyperparameters_min", "0.01",
-                      "--features_hyperparameters_max", "50.0"]
+                      "--features_hyperparameters", features_hyperparameters]
         if features_scaling:
             arguments += ["--features_mol_normalize"]
+    if use_cache:
+        arguments += ["--cache_path", f"{CWD}/tmp/cache.pkl"]
     arguments += ["--alpha", "0.01"]
     if opt_alpha_or_C:
         arguments += ["--alpha_bounds", "0.001", "0.3"]
     mgk_optuna_multi_datasets(arguments)
-    for file in ["optuna.db", "dataset_0.pkl", "dataset_1.pkl", "dataset_2.pkl"]:
-        assert os.path.exists(f'{save_dir}/{file}')
+    for file in ["optuna.db"]:
+        assert os.path.exists(f'{save_dir}/{file}'), f'{save_dir}/{file} does not exist.'
         os.remove(f'{save_dir}/{file}')

@@ -57,7 +57,7 @@ class EnsembleRegressor:
         self.models = []
         self.n_estimators = n_estimators
         self.n_samples_per_model = n_samples_per_model
-        self.n_jobs = n_jobs
+        self.n_jobs = 1 # n_jobs > 1 is not supported yet
         self.verbose = verbose
         self.ensemble_rule = ensemble_rule
         assert (n_estimators > 0)
