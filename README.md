@@ -9,6 +9,10 @@ pip install git+https://gitlab.com/Xiangyan93/graphdot.git@feature/xy
 pip install mgktools
 ```
 
+## QuickStart with Google Colab
+GPU is required to compute graph kernel. 
+- [Interpretability Marginalized Graph Kernel](https://colab.research.google.com/drive/1Z6tx4_3FBhZB9SwOvxex9jIP-XZ40hi9?usp=sharing)
+
 ## Hyperparameters
 [hyperparameters](https://github.com/Xiangyan93/mgktools/tree/main/mgktools/hyperparameters) contains the JSON files that
 define the hyperparameters for MGK.
